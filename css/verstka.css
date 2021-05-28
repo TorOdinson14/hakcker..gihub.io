@@ -1,0 +1,218 @@
+*{
+    box-sizing: border-box;   /*ЧТОБ  PADING НЕ ВЛИЯЛ НА ВНЕШНИЕ РАЗМЕРЫ ЭЛЕМЕНТА  */
+  }
+
+body{
+background-image: url(/img/барная-стойка.jpg);
+background-size: 200%;
+background-repeat:no-repeat ;
+}
+
+
+
+
+/*Общие  */
+
+h3{
+    font-size: 30px;
+padding-left: 30px;
+    color: rgb(10, 9, 9);
+}
+
+.img-center{
+     max-width: 210px;
+}
+
+
+
+
+.content {
+  
+}
+
+.box{
+    margin-right: 60px;
+}
+/*Общие  *********************************/
+
+
+
+
+/*main*/
+
+
+
+
+
+
+
+
+
+
+
+
+/*main*********************************/
+
+
+
+
+a{
+ 
+   text-decoration: none;
+   color: rgb(19, 19, 19);
+   font-size: 20px  ;
+  
+}
+
+
+.header-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    height: 110px;
+}
+
+.header-list{
+padding-top: 5px;
+display: flex;
+justify-content:space-around;
+}
+
+
+.li-link{
+ display:flex;
+justify-content: center;
+align-items: center;
+
+    border-radius: 25px;
+    list-style-type: none;
+    background-color: rgba(87, 87, 119, 0.76);
+
+    
+    width: 150px;
+    height: 50px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.nav-li{
+    text-align: center;
+}
+
+
+
+
+
+
+
+
+/*222222222222222222*/
+.nav-list{
+
+margin-top: 0px;
+margin-bottom: 0px;
+  padding-left: 0px;
+    list-style-type: none;
+    margin-bottom: 40px;
+
+
+
+}
+
+
+
+.nav-li{
+
+    background-color: rgba(218, 219, 228, 0.733);
+
+    margin-bottom: 10px;
+   
+    border: 1px solid;
+    border-radius: 15px;
+ 
+    width: 200px;
+ 
+    list-style-type: none;
+}
+
+
+
+
+
+.header-button{
+    width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+
+
+
+
+/* 33333333333333333333333333333333 */
+
+
+
+
+.aside_3{
+    background: rgba(179, 178, 178, 0.178);
+}
+
+
+.container{
+
+    width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    background-color: rgba(216, 216, 216, 0.486);
+    display: flex;
+
+
+
+
+
+}
+
+
+
+
+
+
+video{
+    width: 700px;
+    height: 515px;
+}
+
+
+
+
+.nav-video{
+margin: 0;
+
+
+ 
+}
+
+
+
+
+.li-video{
+
+  list-style-type: none;
+    padding-right: 0px;
+    padding-bottom: 50px;
+}
+
+
+
