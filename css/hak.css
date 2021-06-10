@@ -195,10 +195,8 @@ main{
   
    }
 
- .contentt-block a{
-     color: rgb(138, 139, 230);
-     font-weight: 600;
-     font-size: 34px;
+ .contentt-block {
+ margin-top: 50px;
  }
 
 iframe{
