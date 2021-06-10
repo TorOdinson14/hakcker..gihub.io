@@ -174,8 +174,8 @@ margin: 0 0 0 0px ;
 
 .nav-li{
 padding-right: 30px;
-max-width: 80px;
-max-height: 35px;
+min-width: 100px;
+max-height: 50px;
 border: 50px;
 }
 
