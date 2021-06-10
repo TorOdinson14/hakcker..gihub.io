@@ -66,10 +66,13 @@ ul{
   
   li{
     list-style-type: none;
+    color: rgb(247, 247, 247);
 
 }
 
-
+.qwe{
+    background-color: rgba(90, 88, 88, 0.295);
+}
 
 main{
     margin: 0px -8px 0px -8px;
@@ -92,6 +95,7 @@ main{
 
 
 iframe{
+    padding-top: 20px;
     padding-bottom: 10px ;
 }
 
