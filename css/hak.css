@@ -10,7 +10,7 @@ background-color: rgb(0, 0, 0);
 }
 
 span{
-    color: rgb(190, 190, 190);
+    color: rgb(238, 238, 238);
 }
 
 
@@ -85,7 +85,9 @@ main{
     background-size: cover;
 }
 
-
+#search-info{
+    background-image: url(https://shodanio.files.wordpress.com/2013/08/welcome.png);
+}
 
 
 
