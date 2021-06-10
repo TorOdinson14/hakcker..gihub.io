@@ -85,7 +85,7 @@ main{
     background-size: cover;
 }
 
-#search-info{
+.search-info{
     background-image: url(https://shodanio.files.wordpress.com/2013/08/welcome.png);
 }
 
