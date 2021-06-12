@@ -101,24 +101,24 @@
 
                         <h2>Все о Nmap</h2>
                         <ul class="list-content">
-    
+
                             <li class="li-content"><a
                                     href="hak-doc/2.1_Этическии_хакинг_с_Nmap.pdf">Nmap</a><span>Мануал</span> </li>
-    
+
                             <li class="li-content"><a href="hak-doc/2.2__Памятка_по_nmap.pdf">Nmap <span>Памятка по
                                         nmap</span></li>
-    
-    
-    
-    
+
+
+
+
                             <li class="li-content"><a href="https://nmap.org/book/scan-methods-null-fin-xmas-scan.html">
                                     Документация</a><span> по специальным флагам</span></li>
-    
+
                             <li class="li-content"><a
                                     href="https://nmap.org/book/scan-methods-null-fin-xmas-scan.html">Подробное
                                     применение</a><span>методов и документация nmap</span></li>
-    
-    
+
+
                         </ul>
 
                     </div>
@@ -132,10 +132,79 @@
                             (портов и соответствующих им служб).</p>
 
 
+                        <ul>
+                            <h2>Самые важные комнды</h2>
+                            <li>
+                                <p>| ifconfig <span>/ Узнать свой ip</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    arp-scan -l <span>/ Сканировать локальную сеть</span> </p>
+                            </li>
+                            <li></li>
+                            <li></li>
+                            <li></li>
+                            <li></li>
+                            <li></li>
+
+                            <li></li>
+
+                        </ul>
+
                         <iframe width="560" height="315" src="https://www.youtube.com/embed/a23oa18wy8M"
                             title="YouTube video player" frameborder="0"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowfullscreen></iframe>
+
+                        <ul class="content-p">
+                            <h2>Сценарий из ролика</h2>
+                            <li>
+                                <p>| apt install nmap <span>/ установка</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    nmap <span>/ открыть прогу</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    nmap scanme.nmap.org <span>/ сканируем сайт</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    nmap 192.168.0.1-254 <span>/ Сканирование диапазона</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    nmap -sA 192.168.0.12 <span>/ TCP ACK сканирование ( -sA)</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    nmap -sP 192.168.0.0/24 <span>/ открыть прогу</span> </p>
+                            </li>
+                            <li>
+                                <p>|
+                                    nmap -PN 192.168.0.12 <span>/ открыть прогу</span> </p>
+                            </li>
+
+                            <li>
+                                <p>|
+                                    nmap --reason scanme.nmap.org <span>/ открыть прогу</span> </p>
+                            </li>
+
+                            <p>|
+                                rimap --open scanme.nmap.org
+                                <span>/ открыть прогу</span> </p>
+                            <p>|
+                                nmap -packet-trace scanme.nmap.org <span>/ открыть прогу</span> </p>
+                            <p>|
+                                nmap --iflist <span>/ открыть прогу</span> </p>
+                            <p>|
+                                nmap <span>/ открыть прогу</span> </p>
+                            <p>|
+                              nmap -O --osscan-guess 192.168.0.1<span>/ открыть прогу</span> </p>
+                        </ul>
+
+
                         <iframe width="560" height="315" src="https://www.youtube.com/embed/Z32G_tX84fQ"
                             title="YouTube video player" frameborder="0"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -150,23 +219,7 @@
                             title="YouTube video player" frameborder="0"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowfullscreen></iframe>
-                        <ul>
-                            <li>
-                                <p>| ifconfig - узнать свой ip</p>
-                            </li>
-                            <li>
-                                <p>|
-                                    arp-scan -l <span></span> </p>
-                            </li>
-                            <li></li>
-                            <li></li>
-                            <li></li>
-                            <li></li>
-                            <li></li>
 
-                            <li></li>
-
-                        </ul>
 
 
                     </div>

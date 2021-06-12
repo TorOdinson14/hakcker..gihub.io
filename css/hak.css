@@ -22,10 +22,19 @@ a{
  }
  
 p{
-    font-size: 30px;
+    font-size: 25px;
     color: rgb(255, 255, 255);
   line-height: 1.5em;
 }
+
+.content-p p{
+    font-size: 20px;
+    color: rgb(255, 255, 255);
+  line-height: 1.1em;
+}
+
+
+
  h1{
     text-align: center;
    
