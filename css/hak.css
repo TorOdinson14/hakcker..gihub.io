@@ -367,7 +367,7 @@ div.scrollmenu {
     display: flex;
    
     text-align: start;
-    background-color: rgb(0, 0, 0);
+    background-color: rgba(56, 56, 56, 0.555);
     overflow: auto;
     white-space: nowrap;
     width: 100%;
