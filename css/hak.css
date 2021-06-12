@@ -381,12 +381,12 @@ div.scrollmenu:hover {
 
 
 div.scrollmenu a {
-    min-width: 100px;
   
+  min-width: 100px;
     display: inline-block;
     color: white;
     text-align: center;
-    padding: 14px;
+   margin-right: 20px;
     text-decoration: none;
 }
 
