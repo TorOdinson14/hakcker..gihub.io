@@ -142,7 +142,7 @@ background: black;
 
 .header-top{
     width: 100%;
-padding: 30px 0 30px 0;
+padding-top: 20px;
 
 }
 
@@ -151,7 +151,7 @@ padding: 30px 0 30px 0;
 
 .header-bottom{
     width: 100%;
-padding-bottom: 20px;
+
 
 }
 
@@ -367,13 +367,15 @@ div.scrollmenu {
     display: flex;
    
     text-align: start;
-    background-color: #333;
+    background-color: rgb(0, 0, 0);
     overflow: auto;
     white-space: nowrap;
     width: 100%;
     justify-content: space-between;
 }
-
+div.scrollmenu:hover {
+    background-color: rgba(94, 89, 107, 0.397);
+}
 
 
 div.scrollmenu a {
