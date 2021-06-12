@@ -363,5 +363,25 @@ iframe{
 
 
 
+div.scrollmenu {
+    display: flex;
+    background-color: #333;
+    overflow: auto;
+    white-space: nowrap;
+    width: 100%;
+    justify-content: space-between;
+}
 
+div.scrollmenu a {
+    min-width: 100px;
+  
+    display: inline-block;
+    color: white;
+    text-align: center;
+    padding: 14px;
+    text-decoration: none;
+}
 
+div.scrollmenu a:hover {
+    background-color: rgb(155, 154, 154);
+}
