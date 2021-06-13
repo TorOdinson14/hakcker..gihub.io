@@ -1,0 +1,27 @@
+git clone  https://gitlab.skillbox.ru/degtiar_arkadii/weblayout
+
+cd weblayout
+
+git checkout -b dev
+
+добовляем внесенные файлы в weblayout
+
+git status
+
+
+
+
+
+
+
+
+git add . 
+
+git commit -m "add new files"
+
+git push  --set-upstream origin dev
+
+
+
+
+2121infamous2121
