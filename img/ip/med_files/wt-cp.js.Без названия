@@ -1,0 +1,6155 @@
+// WebTutor Course Player v.3.5
+// 210217
+
+var g_oCP = null;
+
+$(document).ready(function ()
+{
+	setTimeout(function () { g_oCP = new CP({ jContainer: $("[wt-elem='main']") }); }, 100);
+});
+{ // WTBaseObject
+	if(window.WTBaseObject==null)
+	{
+		window.WTBaseObject = function (oArgs)
+		{
+			this.oPlayer = oArgs.oPlayer;
+			this.jContainer = (oArgs.jContainer!=null) ? oArgs.jContainer : this.oPlayer.jContainer;
+			this.sId = (oArgs.sId!=null) ? oArgs.sId : TOOLS.GUID();
+			this.oSubscribers = {};
+			return this;
+		};
+		WTBaseObject.prototype =
+		{
+			Debug: function (oArgs)
+			{
+				if(g_bDebug)
+				{
+					if(g_bDebugConsole && window.console)
+					{
+						console.log(this.sType + " " + this.sId + ": " + oArgs.sMsg);
+					}
+					else
+					{
+						alert(this.sType + " " + this.sId + ": " + oArgs.sMsg);
+					}
+				}
+				return this;
+			},
+			FireEvent: function (oArgs)
+			{
+				this.Debug({ sMsg: oArgs.sEvent + " fired" });
+				for(var sKey in this.oSubscribers)
+				{
+					if(this.oSubscribers.hasOwnProperty(sKey))
+					{
+						for(var sKey2 in this.oSubscribers[sKey])
+						{
+							if(this.oSubscribers[sKey].hasOwnProperty(sKey2))
+							{
+								if(sKey2==oArgs.sEvent)
+								{
+									for(var i=0; i<this.oSubscribers[sKey][sKey2].length; i++)
+									{
+										this.Debug({ sMsg: oArgs.sEvent + " - subscriber " + sKey + " - before" });
+										this.oSubscribers[sKey][sKey2][i].oArgs.oContext = (this.oSubscribers[sKey][sKey2][i].oContext!=null) ? this.oSubscribers[sKey][sKey2][i].oContext : this;
+										this.oSubscribers[sKey][sKey2][i].oArgs.oThis = this;
+										if(oArgs.oArgs!=null)
+										{
+											this.oSubscribers[sKey][sKey2][i].oArgs.oPassedArgs = oArgs.oArgs;
+										}
+										this.oSubscribers[sKey][sKey2][i].fn.call(this.oSubscribers[sKey][sKey2][i].oArgs.oContext, this.oSubscribers[sKey][sKey2][i].oArgs);
+										if(this.oSubscribers[sKey][sKey2][i].bOnce)
+										{
+											this.Unsubscribe({ sSubscriberId: sKey, sEvent: sKey2, fn: this.oSubscribers[sKey][sKey2][i].fn });
+										}
+										this.Debug({ sMsg: oArgs.sEvent + " - subscriber " + sKey + " - after" });
+									}
+								}
+							}
+						}
+					}
+				}
+				return this;
+			},
+			Load: function (oArgs)
+			{
+				// sURL, sParams, sData, sDataType, sMethod, fnSuccess, oSuccessArgs, fnFailure, oFailureArgs, fnAlways, oAlwaysArgs, oContext
+				var oThis = this;
+				var sMethod = (oArgs.sMethod==null ? "POST" : oArgs.sMethod);
+				var sURL = (oArgs.sURL==null ? this.oPlayer.oConfig.sAPIURL : oArgs.sURL);
+				if(oArgs.sParams!=null)
+				{
+					sURL = TOOLS.AppendURLParams({ sURL: sURL, sParams: oArgs.sParams });
+				}
+				var fnSuccess = oArgs.fnSuccess;
+				var fnFailure = oArgs.fnFailure;
+				var fnAlways = oArgs.fnAlways;
+				var sDataType = (oArgs.sDataType==null ? "json" : oArgs.sDataType);
+				var oSuccessArgs = (oArgs.oSuccessArgs==null ? {} : oArgs.oSuccessArgs);
+				var oFailureArgs = (oArgs.oFailureArgs==null ? {} : oArgs.oFailureArgs);
+				var oAlwaysArgs = (oArgs.oAlwaysArgs==null ? {} : oArgs.oAlwaysArgs);
+				var oContext = (oArgs.oContext==null ? oThis : oArgs.oContext);
+				$.ajax(
+				{
+					type: sMethod,
+					url: sURL,
+					async: true,
+					data: oArgs.sData,
+					dataType: sDataType
+				}).done(function (oData, sStatus, jqXHR)
+				{
+					if(fnSuccess!=null)
+					{
+						if(sDataType=="json")
+						{
+							if(typeof oData != "object")
+							{
+								oData = JSON.parse(oData);
+							}
+							if(oData.error!=0)
+							{
+								oThis.Debug({ sMsg: oData.error_text });
+								return false;
+							}
+						}
+						oSuccessArgs.oData = oData;
+						oSuccessArgs.sStatus = sStatus;
+						oSuccessArgs.jqXHR = jqXHR;
+						fnSuccess.call(oContext, oSuccessArgs);
+						oThis.FireEvent({ sEvent: "loaded" });
+					}
+					else
+					{
+						oThis.Debug({ sMsg: oThis.sId + " LOAD success" });
+					}
+					return true;
+				}).fail(function (jqXHR, sStatus, sError)
+				{
+					if(fnFailure!=null)
+					{
+						oFailureArgs.sError = sError;
+						oFailureArgs.sStatus = sStatus;
+						oFailureArgs.jqXHR = jqXHR;
+						oArgs.fnFailure.call(oContext, oFailureArgs);
+					}
+					else
+					{
+						oThis.Debug({ sMsg: (oThis.sId + " LOAD error: " + sError) });
+					}
+					return false;
+				}).always(function ()
+				{
+					if(fnAlways!=null)
+					{
+						oArgs.fnAlways.call(oContext, oAlwaysArgs);
+					}
+				});
+				return this;
+			},
+			SetProperty: function (oArgs)
+			{
+				if(oArgs!=null)
+				{
+					if(oArgs.sProp!=null && oArgs.sProp!="")
+					{
+						this[oArgs.sProp] = oArgs.vValue;
+					}
+				}
+				return this;
+			},
+			Subscribe: function (oArgs)
+			{
+				if(this.oSubscribers[oArgs.sSubscriberId]==null)
+				{
+					this.oSubscribers[oArgs.sSubscriberId] = {};
+				}
+				if(this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent]==null)
+				{
+					this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent] = [];
+				}
+				for(var i=0; i<this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent].length; i++)
+				{
+					if(this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent].fn==oArgs.fn)
+					{
+						return this;
+					}
+				}
+				this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent].push({ oContext: oArgs.oContext, fn: oArgs.fn, oArgs: oArgs.oArgs, bOnce: (oArgs.bOnce==true) });
+				return this;
+			},
+			Unsubscribe: function (oArgs)
+			{
+				for(var i=0; i<this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent].length; i++)
+				{
+					if(this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent][i].fn==oArgs.fn)
+					{
+						this.oSubscribers[oArgs.sSubscriberId][oArgs.sEvent].splice(i,1);
+						return this;
+					}
+				}
+				return this;
+			}
+		};
+	}
+}
+
+{ // CP
+	window.CP = function (oArgs)
+	{
+		this.xStrings = null;
+		this.jxStrings = null;
+		this.xSession = null;
+		this.jxSession = null;
+		this.jxMaterials = [];
+		this.bAllLoaded = false;
+		this.jContainer = oArgs.jContainer;
+		this.sPlayerType = (this.jContainer.attr("wt-role")=="container") ? "cpx" : "cp";
+		this.jHeader = this.jContainer.find("[wt-elem='header']");
+		this.jBody = this.jContainer.find("[wt-elem='body']");
+		this.jFooter = this.jContainer.find("[wt-elem='footer']");
+		this.jStorage = this.jContainer.find("[wt-elem='storage']");
+		this.jMask = this.jContainer.find("[wt-elem='mask']");
+		this.jMaskLoader = this.jContainer.find("[wt-elem='mask-loader']");
+		this.jError = this.jContainer.find("[wt-elem='error']");
+		this.jFrameContainer = this.jContainer.find("[wt-elem='frame-container']");
+		this.jIFrame = this.jContainer.find("[wt-elem='iframe']");
+		this.jSliderLeft = this.jContainer.find("[wt-elem='slider-left']");
+		this.jSliderRight = this.jContainer.find("[wt-elem='slider-right']");
+		this.jCourseTitle = this.jContainer.find("[wt-elem='course-title']");
+		this.jModuleTitle = this.jContainer.find("[wt-elem='module-title']");
+		this.sModuleURL = "";
+		this.sModuleId = "";
+		this.oCurrentItem = null;
+		this.bMobileX = (navigator.userAgent.toLowerCase().indexOf("/webtutormobilex")!=-1); /*(document.location.href.indexOf("localhost")!=-1);*/
+		this.oConfig =
+		{
+			bCover: true,
+			bAllowNewAttempt: g_oCPConfig.bAllowNewAttempt,
+			bAutoHideTree: true,
+			bEnableCourseMsg: g_oCPConfig.bEnableCourseMsg,
+			bEnableModuleMsg: g_oCPConfig.bEnableModuleMsg,
+			iWDCheckTime: g_oCPConfig.iWatchDogTimeout,
+			sActivatorURL: g_oCPConfig.sActivatorURL,
+			sPartCode: "",
+			sSessionId: "",
+			sLaunchId: "",
+			sDataURL: "handler.html",
+			sCLaunchURL: "course_launch.html",
+			sLangURL: "cplayer/cplang.xml",
+			sLang: "ru"
+		};
+		this.oStatus =
+		{
+			"0": "n", "1": "i", "2": "c", "3": "f", "4": "p"
+		};
+		this.oCourseConfig =
+		{
+			bPanelOpen: false,
+			sLastModuleCode: "",
+			sLaunchType: "basic" //basic|float|hidden
+		};
+		this.oBtns = {};
+		this.oItems = {};
+		this.oMenu = {};
+		this.oMsgs = {};
+		this.aSequence = [];
+		this.Constructor().Init();
+		return this;
+	};
+	CP.prototype._Error = function (oArgs)
+	{
+		this.Hide({ bInstant: true });
+		switch(oArgs.sId)
+		{
+			case "no-params":
+			{
+				this.jError.html("No params").show();
+				break;
+			}
+			case "no-session-id":
+			{
+				this.jError.html("No session id").show();
+				break;
+			}
+			case "no-lang-data":
+			{
+				this.jError.html("Malforned language data").show();
+				break;
+			}
+			case "no-such-lang":
+			{
+				this.jError.html("Language data missing").show();
+				break;
+			}
+			case "lang-data-failed":
+			{
+				this.jError.html("Failed to load language data").show();
+				break;
+			}
+			default:
+			{
+				var sText = this._GetString({ sId: oArgs.sId });
+				if(oArgs.sText!=null)
+				{
+					sText += "<br/>" +  oArgs.sText;
+				}
+				this.jError.html(sText).show();
+				break;
+			}
+		}
+		return false;
+	};
+	CP.prototype._Finish = function (oArgs)
+	{
+		if(this.xSession!=null)
+		{
+			this.Finalize();
+		}
+		else
+		{
+			this._Error({ sId: "error-course-completed" });
+		}
+		return false;
+	};
+	CP.prototype._FormatNumber = function (oArgs)
+	{
+		var sNumber = oArgs.nValue.toString();
+		if(sNumber.indexOf(".")!=-1)
+		{
+			sNumber = oArgs.nValue.toFixed(2).toString();
+			var aParts = sNumber.split(".");
+			aParts[1] = aParts[1].toString();
+			if(aParts[1].charAt(0)=="0" && aParts[1].charAt(1)=="0")
+			{
+				sNumber = aParts[0];
+			}
+			else if(aParts[1].charAt(0)!="0" && aParts[1].charAt(1)=="0")
+			{
+				sNumber = aParts[0] + "." + aParts[1].charAt(0);
+			}
+		}
+		return sNumber;
+	};
+	CP.prototype._GetIncompleteItem = function (oArgs)
+	{
+		var oItem = null;
+		for(var sKey in this.oItems)
+		{
+			if(this.oItems[sKey].sType!="folder" && this.oItems[sKey].sType!="activity")
+			{
+				if(this.oStatus[this.oItems[sKey].sStateId]!="c" && this.oStatus[this.oItems[sKey].sStateId]!="p" && this.oStatus[this.oItems[sKey].sStateId]!="f")
+				{
+					oItem = this.oItems[sKey];
+					break;
+				}
+			}
+		}
+		return oItem;
+	};
+	CP.prototype._GetItemByCode = function (oArgs)
+	{
+		var oItem = null;
+		for(var sKey in this.oItems)
+		{
+			if(this.oItems[sKey].sCode==oArgs.sCode)
+			{
+				oItem = this.oItems[sKey];
+				break;
+			}
+		}
+		return oItem;
+	};
+	CP.prototype._GetNextItem = function (oArgs)
+	{
+		var oItem = null;
+		if(oArgs!=null)
+		{
+			if(oArgs.sCode!=null)
+			{
+				var oCurItem = this._GetItemByCode(oArgs);
+				if(oCurItem!=null)
+				{
+					for(var i=0; i<this.aSequence.length-1; i++) // omit last elem, no next
+					{
+						if(this.aSequence[i]==oCurItem.sId)
+						{
+							oItem = this.oItems[this.aSequence[i+1]];
+							break;
+						}
+					}
+				}
+			}
+		}
+		return oItem;
+	};
+	CP.prototype._GetPrevItem = function (oArgs)
+	{
+		var oItem = null;
+		if(oArgs!=null)
+		{
+			if(oArgs.sCode!=null)
+			{
+				var oCurItem = this._GetItemByCode(oArgs);
+				if(oCurItem!=null)
+				{
+					for(var i=this.aSequence.length-1; i>0; i--) // omit first elem, no prev
+					{
+						if(this.aSequence[i]==oCurItem.sId)
+						{
+							oItem = this.oItems[this.aSequence[i-1]];
+							break;
+						}
+					}
+				}
+			}
+		}
+		return oItem;
+	};
+	CP.prototype._GetParams = function (oArgs)
+	{
+		// called after url parameters are parsed, before data is loaded, no data-based actions here
+		var sVars = unescape(window.location.search);
+		if(sVars=="")
+		{
+			return false;
+		}
+		sVars = sVars.substr(1);
+		var aVars = sVars.split("&");
+		var sSID = "";
+		var aParts;
+		for(var i=0; i<aVars.length; i++)
+		{
+			aParts = aVars[i].split("=");
+			switch(aParts[0])
+			{
+				case "part_code":
+				{
+					this.oConfig.sPartCode = aParts[1];
+					break;
+				}
+				case "session_id":
+				{
+					this.oConfig.sSessionId = aParts[1];
+					break;
+				}
+				case "launch_id":
+				{
+					this.oConfig.sLaunchId = aParts[1];
+					break;
+				}
+				case "tracking_url":
+				{
+					this.oConfig.sDataURL = aParts[1];
+					break;
+				}
+				case "lang":
+				{
+					if(aParts[1].length>2)
+					{
+						aParts[1] = aParts[1].substring(0,2);
+					}
+					this.oConfig.sLang = aParts[1];
+					break;
+				}
+				case "redirect_url":
+				{
+					this.oCourseConfig.sJumpToURL = CLTOOLS.Base64.Decode({ sString: aParts[1] });
+					break;
+				}
+				case "launch_type":
+				{
+					this.oCourseConfig.sLaunchType = aParts[1];
+					break;
+				}
+				case "panel":
+				{
+					this.oCourseConfig.bPanelOpen = TOOLS.Refine({ sValue: aParts[1], sType: "bool" });
+					break;
+				}
+			}
+		}
+		return true;
+	};
+	CP.prototype._GetString = function (oArgs)
+	{
+		var jxString = this.jxStrings.find("data > " + this.oConfig.sLang + " > string[id='" + oArgs.sId + "']");
+		return ((jxString.length==0) ? "" : jxString.text());
+	};
+	CP.prototype._HasIncompleteModules = function (oArgs)
+	{
+		var bIncomplete = false;
+		for(var sKey in this.oItems)
+		{
+			if(this.oItems[sKey].sType!="folder" && this.oItems[sKey].sType!="activity")
+			{
+				if(this.oStatus[this.oItems[sKey].sStateId]!="c" && this.oStatus[this.oItems[sKey].sStateId]!="p" && this.oStatus[this.oItems[sKey].sStateId]!="f")
+				{
+					bIncomplete = true;
+					break;
+				}
+			}
+		}
+		return bIncomplete;
+	};
+	CP.prototype._IsCompleted = function (oArgs)
+	{
+		var bCompleted = true;
+		for(var sKey in this.oItems)
+		{
+			if(this.oItems.hasOwnProperty(sKey))
+			{
+				if(!this.oItems[sKey]._IsCompleted())
+				{
+					bCompleted = false;
+					break;
+				}
+			}
+		}
+		return bCompleted;
+	};
+	CP.prototype._NextModuleAllowed = function (oArgs)
+	{
+		var oNextItem = this._GetNextItem(oArgs);
+		if(oNextItem!=null)
+		{
+			return oNextItem.bLaunchable;
+		}
+		return false;
+	};
+	CP.prototype._Warning = function (oArgs)
+	{
+		var jWarning = this.jStorage.find("[wt-role='course-already-finished']").appendTo("body");
+		if(oArgs!=null)
+		{
+			if(oArgs.sMsg!=null && oArgs.sMsg!="")
+			{
+				jWarning.find("[wt-role='course-already-finished-text']").html(oArgs.sMsg);
+			}
+		}
+		this.jContainer.remove();
+		this.jMask.hide();
+		return true;
+	};
+	CP.prototype.Adjust = function (oArgs)
+	{
+		this.nW = $(window).width();
+		this.nH = $(window).height();
+		this.oFrame.SetSize();
+		return this;
+	};
+	CP.prototype.Complete = function (oArgs)
+	{
+		var oThis = this;
+		this.Mask({ bOn: true });
+		var bRestart = (oArgs==null) ? false : (oArgs.bRestart==true);
+		$.ajax(
+		{
+			type: "GET",
+			url: "/course_finish.html?ajax=1&launch_id=" + oThis.oConfig.sLaunchId + "&session_id=" + oThis.oConfig.sSessionId + "&rnd=" + Math.random(),
+			dataType: "xml",
+			success: function (xmlResponse)
+			{
+				oThis.xSession = xmlResponse;
+				if(typeof oThis.xSession != "object")
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "error-parse" });
+				}
+				var oDoc = xmlResponse;
+				if(typeof oDoc != "object")
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "malformed-finish" });
+				}
+				if($(oDoc).find("data > error").text()!="0")
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "error-finish", sText: $(oDoc).find("data > error_text").text() });
+				}
+				oThis.Finalize({ bRestart: bRestart });
+				return true;
+			},
+			complete: function (jqXHR, sStatus)
+			{
+				if(sStatus!="success")
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "error-finish-call", sText: sStatus });
+				}
+				return true;
+			},
+			failure: function ()
+			{
+				oThis.Mask();
+				return oThis._Error({ sId: "error-finish-call", sText: sStatus });
+			}
+		});
+		return oThis;
+	};
+	CP.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		this.bMobile = (this.jContainer.find("[wt-elem='mobile']").css("visibility")=="hidden");
+		this.oFrame = (new CPFrame({ oPlayer: this, jContainer: this.jFrameContainer, jFrame: this.jIFrame })).Init();
+		this.oStyleSheet = $(document.createElement("style")).attr({ "wt-elem": "cp-sheet" }).appendTo($("head"))[0].sheet;
+		this.jPanelMask = this.jContainer.find("[wt-role='panel-mask']");
+		this.Adjust();
+		$(window).on("resize orientationchange", function (e) { oThis.oFrame.Resize.call(oThis.oFrame); });
+		return this;
+	};
+	CP.prototype.CreateMsgs = function (oArgs)
+	{
+		var oThis = this;
+		if(this.oConfig.bEnableCourseMsg)
+		{
+			var aMsgBtns = [ { sId: "finish", sText: this._GetString({ sId: "btn-complete-course" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "finish", sMsgId: "course_completed" } }, {  sId: "cancel", sText: this._GetString({ sId: "btn-stay-in-course" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "cancel", sMsgId: "course_completed" } } ];
+			if(this.oConfig.bAllowNewAttempt)
+			{
+				aMsgBtns.splice(1, 0, { sId: "restart", sText: this._GetString({ sId: "btn-restart-course" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "restart", sMsgId: "course_completed" } });
+			}
+			this.oMsgs["course_completed"] = new CXMsg({ oPlayer: this, sId: "course_completed", jContainer: $("body"), aBtns: aMsgBtns, sHeader: this._GetString({ sId: "status-msg-header" }), sMsg: this._GetString({ sId: "course-failed" }) });
+		}
+		if(this.oConfig.bEnableModuleMsg)
+		{
+			this.oMsgs["module_completed"] = new CXMsg({ oPlayer: this, sId: "module_completed", jContainer: $("body"), aBtns: [ { sId: "next", sText: this._GetString({ sId: "btn-next-module" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "next-module", sMsgId: "module_completed" } }, { sId: "incomplete", sText: this._GetString({ sId: "btn-incomplete-module" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "incomplete-module", sMsgId: "module_completed" } }, {  sId: "cancel", sText: this._GetString({ sId: "btn-stay-in-module" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "cancel", sMsgId: "module_completed" } } ], sHeader: this._GetString({ sId: "module-msg-header" }), sMsg: this._GetString({ sId: "module-msg-text" }) });
+		}
+		this.oMsgs["finish_msg"] = new CXMsg({ oPlayer: this, sId: "finish_msg", jContainer: $("body"), aBtns: [ {  sId: "cancel", sText: this._GetString({ sId: "btn-stay-in-module" }), fn: oThis.UIEvent, oArgs: { oThis: oThis, sAction: "cancel", sMsgId: "finish_msg" } } ], sHeader: this._GetString({ sId: "finish-msg-header" }), sMsg: this._GetString({ sId: "finish-msg-text" }) });
+		return this;
+	};
+	CP.prototype.FillLabels = function (oArgs)
+	{
+		var oThis = this;
+		this.jContainer.find("[cpx-string]").each(function ()
+		{
+			var jxString = oThis.jxStrings.find("string[id='" + this.getAttribute("cpx-string") + "']");
+			if(jxString.length!=0)
+			{
+				this.innerHTML = jxString.text();
+			}
+		});
+		this.jContainer.find("[cpx-title]").each(function ()
+		{
+			var jxString = oThis.jxStrings.find("string[id='" + this.getAttribute("cpx-title") + "']");
+			if(jxString.length!=0)
+			{
+				this.setAttribute("title", jxString.text());
+			}
+		});
+		$(this.jxStrings.find("string")).each(function ()
+		{
+			$("." + $(this).attr("id")).html($(this).text());
+		});
+		$($(CP.docLang).find("data > " + this.oConfig.sLang + " > title")).each(function ()
+		{
+			$("." + $(this).attr("id")).attr({ "title": $(this).text() });
+		});
+		return this;
+	};
+	CP.prototype.Finalize = function (oArgs)
+	{
+		var bRestart = (oArgs==null) ? false : (oArgs.bRestart==true);
+		if(bRestart)
+		{
+			document.location.href = this.oConfig.sActivatorURL + this.oCourseConfig.sCourseId;
+			return true;
+		}
+		this.bIsCompleted = true;
+		this.oFrame.SetContent({ sType: "finished" });
+		this.oMenu["contents"].Close().Disable();
+		for(var sKey in this.oBtns)
+		{
+			if(this.oBtns.hasOwnProperty(sKey))
+			{
+				this.oBtns[sKey].Disable();
+			}
+		}
+		this.SetTitle({ sTarget: "module", sText: this._GetString({ sId: "course-completed" }) });
+		if(this.oMenu["contents"].oBtns["finish"]!=null)
+		{
+			this.oMenu["contents"].oBtns["finish"].SetText({ sText: this._GetString({ sId: "course-finished" }) }).Disable();
+		}
+		this.Mask();
+		if(this.bMobileX)
+		{
+			this._Warning({ sMsg:  this._GetString({ sId: "mobilex-course-completed" }) });
+		}
+		else
+		{
+			if(this.oCourseConfig.sJumpToURL!=null && this.oCourseConfig.sJumpToURL!="")
+			{
+				document.location.href = this.oCourseConfig.sJumpToURL;
+				return true;
+			}
+			else
+			{
+				window.close();
+				if(!window.closed)
+				{
+					alert(this._GetString({ sId: "cannot-close" }));
+				}
+			}
+		}
+		return this;
+	};
+	CP.prototype.Hide = function (oArgs)
+	{
+		if(oArgs==null)
+		{
+			this.jHeader.hide().css({ "visibility": "visible" }).fadeIn();
+			this.jBody.hide().css({ "visibility": "visible" }).fadeIn();
+			this.jFooter.hide().css({ "visibility": "visible" }).fadeIn();
+		}
+		else if(oArgs.bInstant==true)
+		{
+			this.jHeader.hide();
+			this.jBody.hide();
+			this.jFooter.hide();
+		}
+		else
+		{
+			this.jHeader.hide().css({ "visibility": "visible" }).fadeIn();
+			this.jBody.hide().css({ "visibility": "visible" }).fadeIn();
+			this.jFooter.hide().css({ "visibility": "visible" }).fadeIn();
+		}
+		return this;
+	};
+	CP.prototype.Init = function (oArgs)
+	{
+		var oThis = this;
+		this.Mask({ bOn: true });
+		Browser.Init();
+		if(!this._GetParams())
+		{
+			this.Mask();
+			return this._Error({ sId: "no-params" });
+		}
+		if(this.oConfig.sSessionId=="")
+		{
+			this.Mask();
+			return this._Error({ sId: "no-session-id" });
+		}
+		this.Load();
+		return this;
+	};
+	CP.prototype.InitCourse = function (oArgs)
+	{
+		var oThis = this;
+		this.oCourseConfig.sCourseType = this.jxSession.find("structure > struct_type").length==0 ? "fixed" : this.jxSession.find("structure > struct_type").text();
+		this.oCourseConfig.bDynamic = (this.oCourseConfig.sCourseType=="dynamic");
+		this.oCourseConfig.sCourseId = this.jxSession.find("structure > course_id").text();
+		this.oCourseConfig.iCourseW = +this.jxSession.find("structure > win_width").text();
+		this.oCourseConfig.iCourseH = +this.jxSession.find("structure > win_height").text();
+		this.oCourseConfig.bMoreThanOneModule = (this.jxSession.find("structure > parts > part").length > 1);
+		this.oCourseConfig.sViewType = this.jxSession.find("structure > view_type").text();
+		if(this.bMobileX && this.oCourseConfig.sViewType!="structure")
+		{
+			this.oCourseConfig.bOpenSingleModule = true;
+			this.oCourseConfig.bOpenFirstModule = true;
+			this.oCourseConfig.bOpenLastVisited = true;
+		}
+		else
+		{
+			this.oCourseConfig.bOpenSingleModule = this.oCourseConfig.bDynamic ? true :(this.jxSession.find("structure > settings > open_single_module").text()!="0");
+			this.oCourseConfig.bOpenFirstModule = this.oCourseConfig.bDynamic ? true : (this.jxSession.find("structure > settings > open_first_module").text()!="0");
+			this.oCourseConfig.bOpenLastVisited = this.oCourseConfig.bDynamic ? true : (this.jxSession.find("structure > settings > open_last_visited").text()!="0");
+		}
+		this.oCourseConfig.bOpenNextAfterCompleted = this.oCourseConfig.bDynamic ? true : (this.jxSession.find("structure > settings > open_next_after_completed").text()!="0");
+		this.oCourseConfig.bEnableUserCompletion = (this.jxSession.find("structure > settings > enable_user_completion").text()!="0");
+		this.oCourseConfig.bDisplayCompletionMsg = (this.jxSession.find("structure > settings > display_completion_msg").text()!="0");
+		this.oCourseConfig.bDisplayProceedMsg = (this.jxSession.find("structure > settings > display_proceed_msg").text()!="0");
+		this.oCourseConfig.sCompletionMsg = this.jxSession.find("structure > settings > completion_msg").text();
+		this.oCourseConfig.sProceedMsg = this.jxSession.find("structure > settings > proceed_msg").text();
+		this.oCourseConfig.sFinishAction = this.jxSession.find("structure > settings > course_finish_action").text();
+		this.oCourseConfig.sFinishMsg = this.jxSession.find("structure > settings > course_finish_msg").text();
+		this.oCourseConfig.bAllowChecks = (this.jxSession.find("structure > settings > allow_checks").text()!="0");
+		this.oCourseConfig.sAfterChecks = this.jxSession.find("structure > settings > after_checks").text();
+		if(this.jxSession.find("structure > settings > launch_type").length!=0)
+		{
+			this.oCourseConfig.sLaunchType = this.jxSession.find("structure > settings > launch_type").text();
+		}
+		if(this.jxSession.find("structure > settings > panel").length!=0)
+		{
+			this.oCourseConfig.bPanelOpen = TOOLS.Refine({ sType: "bool", sValue: this.jxSession.find("structure > settings > panel").text() });
+		}
+		this.oCourseConfig.sCourseName = this.jxSession.find("structure > course_name").text();
+		this.oCourseConfig.sUserName = this.jxSession.find("structure > person_fullname").text();
+		this.oCourseConfig.bAllowScroll = TOOLS.Refine({ sType: "bool", sValue: this.jxSession.find("structure > disp_scrolling").text() });
+		if(this.oCourseConfig.sLastModuleCode=="")
+		{
+			this.oCourseConfig.sLastModuleCode = this.jxSession.find("structure > last_usage_part_code").text();
+		}
+		this.sISOAppointed = this.jxSession.find("structure > start_usage_date").text();
+		this.sISODue = this.jxSession.find("structure > max_end_date").text();
+		this.oCourseConfig.sDateAppointed = (this.sISOAppointed!="") ? TOOLS.DateStringFromISO8601({ sISODate: this.sISOAppointed }) : "-";
+		this.oCourseConfig.sDateDue = (this.sISODue!="") ? TOOLS.DateStringFromISO8601({ sISODate: this.sISODue }) : "-";
+		this.oCourseConfig.sStatus = this.oStatus[this.jxSession.find("structure > state_id").text()];
+		this.oCourseConfig.sPreStatus = this.oStatus[this.jxSession.find("structure > pre_state_id").text()];
+		this.oCourseConfig.sTotal = this.jxSession.find("structure > score").text();
+		this.oCourseConfig.sMaxScore = this.jxSession.find("structure > max_score").text();
+		this.oCourseConfig.sMasteryScore = this.jxSession.find("structure > mastery_score").text();
+		var jxParts = this.jxSession.find("structure > parts > part");
+
+		var sGUID;
+		for(var i=0; i<jxParts.length; i++)
+		{
+			sGUID = TOOLS.GUID();
+			this.oItems[sGUID] = new CPItem({ oPlayer: this, sId: sGUID, jxPart: $(jxParts[i]) });
+			this.oItems[sGUID].bFirst = (i==0);
+			this.oItems[sGUID].bLast = (i==jxParts.length-1);
+		}
+		for(var sKey in this.oItems)
+		{
+			if(this.oItems.hasOwnProperty(sKey))
+			{
+				if(this.oItems[sKey].bHasParent)
+				{
+					for(var sKey2 in this.oItems)
+					{
+						if(this.oItems.hasOwnProperty(sKey2))
+						{
+							if(sKey==sKey2)
+							{
+								continue;
+							}
+							if(this.oItems[sKey2].sCode==this.oItems[sKey].sParentCode)
+							{
+								this.oItems[sKey2].bHasChildren = true;
+								if(this.oItems[sKey2].aChildIds==null)
+								{
+									this.oItems[sKey2].aChildIds = [];
+								}
+								this.oItems[sKey2].aChildIds.push(sKey);
+								this.oItems[sKey].sParentId = sKey2;
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		this.jxMaterials = this.jxSession.find("structure > materials > material");
+
+		if(this.sPlayerType=="cp")
+		{
+			this.SetTitle({ sTarget: "course", sText: this.jxSession.find("structure > course_name").text() });
+			this.oMenu["contents"] = (new CPMenu({ oPlayer: this, jMenu: this.jSliderLeft, sType: "contents", sSide: "left", nTop: this.nHeaderH, nWidth: this.nW, nHeight: this.nWorkareaH })).Create();
+			this.oMenu["comment"] = (new CPMenu({ oPlayer: this, jMenu: this.jSliderRight, sType: "comment", sSide: "right", nTop: this.nHeaderH, nWidth: this.nW, nHeight: this.nWorkareaH })).Create();
+			this.oBtns["contents"] = new CPButton({ oPlayer: this, oTarget: this, oElem: this.jHeader.find("[wt-elem='btn-contents']")[0], sAction: "contents" });
+			this.oBtns["next"] = new CPButton({ oPlayer: this, oTarget: this, oElem: this.jFooter.find("[wt-elem='btn-next']")[0], sAction: "next" }).Disable();
+			this.oBtns["prev"] = new CPButton({ oPlayer: this, oTarget: this, oElem: this.jFooter.find("[wt-elem='btn-prev']")[0], sAction: "prev" }).Disable();
+			this.oProgress = new CPProgress({ oPlayer: this, jContainer: this.jHeader.find("[wt-elem='progress']") });
+		}
+		else if(this.sPlayerType=="cpx")
+		{
+			if(jxParts.length>1 && this.oCourseConfig.sLaunchType=="hidden")
+			{
+				this.oCourseConfig.sLaunchType = "float";
+				this.oCourseConfig.bPanelOpen = false;
+			}
+			this.jContainer.find("[wt-role='menu-main']").attr({ "wt-launch-type": this.oCourseConfig.sLaunchType });
+			this.oMenu["contents"] = (new CPSimpleMenu({ oPlayer: this, jMenu: this.jContainer.find("[wt-role='menu-main']"), sType: "contents" })).Fill();
+			switch(this.oCourseConfig.sLaunchType)
+			{
+				case "float":
+				{
+					this.jContainer.find("[wt-role='panel-btn']").attr({ "wt-launch-type": this.oCourseConfig.sLaunchType }).on("click", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e, sAction: "switch", oThis: oThis }); });
+					if(this.oCourseConfig.bPanelOpen)
+					{
+						this.jContainer.find("[wt-role='panel-btn']").show();
+						this.jPanelMask.show();
+					}
+					else
+					{
+						this.jPanelMask.hide();
+						this.oMenu["contents"].Close({ bInstant: true });
+					}
+					break;
+				}
+				case "hidden":
+				{
+					this.jContainer.find("[wt-role='panel-btn']").remove();
+					break;
+				}
+				case "basic":
+				default:
+				{
+					this.jContainer.find("[wt-role='panel-btn']").attr({ "wt-launch-type": this.oCourseConfig.sLaunchType }).on("click", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e, sAction: "switch", oThis: oThis }); });
+					if(this.bMobile)
+					{
+						if(this.oCourseConfig.bPanelOpen)
+						{
+							this.jPanelMask.show();
+						}
+						else
+						{
+							this.jPanelMask.hide();
+							this.oMenu["contents"].Close({ bInstant: true });
+						}
+					}
+					break;
+				}
+			}
+			if(this.oConfig.bCover && this.oCourseConfig.bDynamic)
+			{
+				this.oMenu["contents"].jMenu.hide();
+				this.oFrame.jFrame.css({ "visibility": "hidden" });
+				this.oCover = new CPCover({ oPlayer: this, jContainer: this.jContainer.find("[wt-role='cover-container']") });
+			}
+			else
+			{
+				this.jContainer.find("[wt-role='cover-container']").remove();
+			}
+			if(!this.oCourseConfig.bDynamic)
+			{
+				this.jContainer.find("[wt-role='home']").remove();
+			}
+		}
+		return this;
+	};
+	CP.prototype.Load = function (oArgs)
+	{
+		var oThis = this;
+		$.ajax(
+		{
+			type: "GET",
+			url: oThis.oConfig.sLangURL + "?lang=" + oThis.oConfig.sLang + "&_rnd=" + Math.random(),
+			dataType: "xml",
+			success: function (xmlResponse)
+			{
+				if(typeof xmlResponse != "object")
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "no-lang-data" });
+				}
+				oThis.xStrings = xmlResponse;
+				oThis.jxStrings = $(oThis.xStrings);
+				if(oThis.jxStrings.length==0)
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "no-such-lang" });
+				}
+				oThis.FillLabels().CreateMsgs().LoadStructure({ bInit: true });
+				return true;
+			},
+			failure: function ()
+			{
+				oThis.Mask();
+				return oThis._Error({ sId: "lang-data-failed" });
+			}
+		});
+		return this;
+	};
+	CP.prototype.LoadStructure = function (oArgs)
+	{
+		var oThis = this;
+		var bInit = (oArgs.bInit==true);
+		$.ajax(
+		{
+			type: "GET",
+			url: oThis.oConfig.sDataURL + "?command=wt_get_structure&session_id=" + oThis.oConfig.sSessionId + "&launch_id=" + oThis.oConfig.sLaunchId + "&rnd=" + Math.random(),
+			dataType: "xml",
+			success: function (xmlResponse)
+			{
+				oThis.xSession = xmlResponse;
+				if(typeof oThis.xSession != "object")
+				{
+					oThis.Mask();
+					if(typeof oThis.xSession=="string")
+					{
+						if(oThis.xSession.toUpperCase().indexOf("ERROR=8")!=-1)
+						{
+							return oThis._Finish();
+						}
+						else
+						{
+							return oThis._Error({ sId: "error-parse" });
+						}
+					}
+					else
+					{
+						return oThis._Error({ sId: "error-parse" });
+					}
+				}
+				oThis.jxSession = $(oThis.xSession);
+				if(oThis.jxSession.find("structure > course_id").length < 1)
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "error-session-doc" });
+				}
+				if(Object.keys(oThis.oItems).length==0)
+				{
+					oThis.InitCourse();
+					var bHideFinishBtn = false;
+					if(oThis.jxSession.find("structure > session").length!=0)
+					{
+						if(oThis.jxSession.find("structure > session").text()=="f")
+						{
+							bHideFinishBtn = true;
+							if(oThis.oMenu["contents"].oBtns["finish"]!=null)
+							{
+								oThis.oMenu["contents"].oBtns["finish"].Hide();
+							}
+							if(oThis.oCourseConfig.sFinishAction=="continue_msg")
+							{
+								if(!oThis.bFinishMsgShown)
+								{
+									if(oThis.oCourseConfig.sFinishMsg!=null && oThis.oCourseConfig.sFinishMsg!="")
+									{
+										oThis.oMsgs["finish_msg"].SetText({ sText: oThis.oCourseConfig.sFinishMsg });
+									}
+									oThis.oMsgs["finish_msg"].Show();
+									oThis.bFinishMsgShown = true;
+								}
+							}
+							else if(oThis.oCourseConfig.sFinishAction=="continue_no_msg")
+							{
+								return true;
+							}
+							else
+							{
+								return (oThis.bMobileX ? oThis._Warning({ sMsg:  oThis._GetString({ sId: "mobilex-course-completed" }) }) : oThis._Warning({ sMsg: oThis.oCourseConfig.sFinishMsg }) );
+							}
+						}
+					}
+					if(!oThis.oCourseConfig.bDynamic)
+					{
+						if(oThis.oConfig.sPartCode!="" && oThis.oCourseConfig.bOpenLastVisited)
+						{
+							var oItem = oThis._GetItemByCode({ sCode: oThis.oConfig.sPartCode });
+							if(oItem!=null)
+							{
+								if(oItem._IsCompleted() && oThis.oCourseConfig.bOpenNextAfterCompleted)
+								{
+									var oNext = oThis._GetNextItem({ sCode: oItem.sCode });
+									if(oNext!=null)
+									{
+										oItem = oNext;
+									}
+								}
+								oThis.oConfig.sPartCode = oItem.sCode;
+								oItem.Launch();
+							}
+						}
+						else if(oThis.oCourseConfig.sStatus=="n" && oThis.oCourseConfig.bOpenFirstModule)
+						{
+							if(Object.keys(oThis.oItems).length!=0)
+							{
+								oThis.oItems[Object.keys(oThis.oItems)[0]].Launch();
+							}
+						}
+						else if(Object.keys(oThis.oItems).length==1 && (oThis.oCourseConfig.bOpenSingleModule || oThis.oCourseConfig.sLaunchType=="hidden"))
+						{
+							oThis.oItems[Object.keys(oThis.oItems)[0]].Launch();
+						}
+						else
+						{
+							if(oThis.sPlayerType=="cp")
+							{
+								oThis.oMenu["contents"].Open();
+							}
+						}
+					}
+					oThis.UpdateInfo({ bProceed: true, bInit: bInit });
+					if(bHideFinishBtn && oThis.oMenu["contents"].oBtns["finish"]!=null)
+					{
+						oThis.oMenu["contents"].oBtns["finish"].Hide();
+					}
+					oThis.Mask();
+					oThis.Show();
+				}
+				else
+				{
+					oThis.UpdateCourseData();
+					oThis.UpdateInfo({ bProceed: true, bInit: bInit });
+					oThis.bAllLoaded = true;
+				}
+				return true;
+			},
+			complete: function (jx, sStatus)
+			{
+				if(sStatus!="success")
+				{
+					oThis.Mask();
+					if(jx!=null)
+					{
+						if(jx.responseText!=null)
+						{
+							if(jx.responseText.toUpperCase().indexOf("ERROR=0")!=-1)
+							{
+								if(jx.responseText.toUpperCase().indexOf("SESSION=F")!=-1)
+								{
+									if(oThis.oCourseConfig.sCourseId==null)
+									{
+										return oThis._Warning();
+									}
+									else
+									{
+										if(oThis.oCourseConfig.sFinishAction=="continue_msg")
+										{
+											if(oThis.oCourseConfig.sFinishMsg!=null && oThis.oCourseConfig.sFinishMsg!="")
+											{
+												oThis.oMsgs["finish_msg"].SetText({ sText: oThis.oCourseConfig.sFinishMsg });
+											}
+											oThis.oMsgs["finish_msg"].Show();
+										}
+										else if(oThis.oCourseConfig.sFinishAction=="continue_no_msg")
+										{
+											return true;
+										}
+										else
+										{
+											return (oThis.bMobileX ? oThis._Warning({ sMsg:  oThis._GetString({ sId: "mobilex-course-completed" }) }) : oThis._Warning({ sMsg: oThis.oCourseConfig.sFinishMsg }) );
+										}
+									}
+								}
+							}
+							else
+							{
+								if(jx.responseText.toUpperCase().indexOf("SESSION=F")!=-1)
+								{
+									if(oThis.oCourseConfig.sCourseId==null)
+									{
+										return oThis._Warning();
+									}
+									else
+									{
+										if(oThis.oCourseConfig.sFinishAction=="continue_msg")
+										{
+											if(oThis.oCourseConfig.sFinishMsg!=null && oThis.oCourseConfig.sFinishMsg!="")
+											{
+												oThis.oMsgs["finish_msg"].SetText({ sText: oThis.oCourseConfig.sFinishMsg });
+											}
+											oThis.oMsgs["finish_msg"].Show();
+										}
+										else if(oThis.oCourseConfig.sFinishAction=="continue_no_msg")
+										{
+											return true;
+										}
+										else
+										{
+											return (oThis.bMobileX ? oThis._Warning({ sMsg:  oThis._GetString({ sId: "mobilex-course-completed" }) }) : oThis._Warning({ sMsg: oThis.oCourseConfig.sFinishMsg }) );
+										}
+									}
+								}
+								else
+								{
+									return oThis._Error({ sId: "error-structure", sText: sStatus });
+								}
+							}
+						}
+					}
+				}
+				return false;
+			},
+			failure: function (jx, sStatus)
+			{
+				oThis.Mask();
+				return oThis._Error({ sId: "failure-structure" });
+			}
+		});
+	};
+	CP.prototype.Mask = function (oArgs)
+	{
+		if(this.jMask.length==0)
+		{
+			this.jMask = $("[wt-elem='mask']");
+		}
+		if(this.jMaskLoader.length==0)
+		{
+			this.jMaskLoader = this.jMask.find("[wt-elem='mask-loader']");
+		}
+		if(oArgs!=null)
+		{
+			if(oArgs.bOn==true)
+			{
+				this.jMask.show();
+				if(oArgs.bLoader==false)
+				{
+					this.jMaskLoader.hide();
+				}
+				if(oArgs.z!=null)
+				{
+					this.jMask.css({ "z-index": oArgs.z });
+				}
+				return true;
+			}
+		}
+		this.jMaskLoader.show();
+		this.jMask.hide();
+		return this;
+	};
+	CP.prototype.Rate = function (oArgs)
+	{
+		var oThis = this;
+		$.ajax(
+		{
+			type: "GET",
+			url: oThis.oConfig.sDataURL + "?command=wt_rate&session_id=" + oThis.oConfig.sSessionId + "&part_code=" + oArgs.sCode + "&rating=" + oArgs.iRating,
+			dataType: "xml",
+			success: function (xmlResponse)
+			{
+				oThis.xResponse = xmlResponse;
+				if(typeof oThis.xResponse != "object")
+				{
+					oThis.Mask();
+				}
+				return true;
+			},
+			complete: function (jx, sStatus)
+			{
+				if(sStatus!="success")
+				{
+					oThis.Mask();
+					if(jx.responseText.toUpperCase().indexOf("ERROR=0")!=-1)
+					{
+						if(jx.responseText.toUpperCase().indexOf("SESSION=F")!=-1)
+						{
+							return oThis._Warning();
+						}
+					}
+					else
+					{
+						if(jx.responseText.toUpperCase().indexOf("SESSION=F")!=-1)
+						{
+							return oThis._Warning();
+						}
+						else
+						{
+							return oThis._Error({ sId: "error-structure", sText: sStatus });
+						}
+					}
+				}
+				return false;
+			},
+			failure: function (jx, sStatus)
+			{
+				oThis.Mask();
+				return oThis._Error({ sId: "failure-structure" });
+			}
+		});
+	};
+	CP.prototype.ResetAPI = function (oArgs)
+	{
+		var oThis = this;
+		if(!(oThis instanceof CP))
+		{
+			if(oArgs!=null && oArgs.cur_instance!=null)
+			{
+				oThis = oArgs.cur_instance;
+			}
+			else
+			{
+				return false;
+			}
+		}
+		ResetAPI();
+		API.session_id = oThis.sModuleSessionId;
+		API.tracking_url = oThis.oConfig.sDataURL;
+		oCurrent.session_id = oThis.sModuleSessionId;
+		oCurrent.tracking_url = oThis.oConfig.sDataURL;
+		oThis.oFrame.SetContent({ sType: "final" });
+		return oThis;
+	};
+	CP.prototype.SetTitle = function (oArgs)
+	{
+		switch(oArgs.sTarget)
+		{
+			case "course":
+			{
+				this.jCourseTitle.html(oArgs.sText);
+				break;
+			}
+			case "module":
+			{
+				this.jModuleTitle.html(oArgs.sText);
+				break;
+			}
+		}
+		return this;
+	};
+	CP.prototype.Show = function (oArgs)
+	{
+		this.jFrameContainer.hide().css({ "visibility": "visible" }).fadeIn();
+		this.jContainer.find("[wt-role='menu-main']").hide().css({ "visibility": "visible" }).fadeIn();
+		return this;
+	};
+	CP.prototype.Skip = function (oArgs)
+	{
+		var oThis = this;
+		var sURL = oThis.oConfig.sDataURL + "?command=wt_skip&session_id=" + oThis.oConfig.sSessionId + "&part_code=" + oArgs.oItem.sCode;
+		if(oArgs.bRevert)
+		{
+			sURL += "&revert=1";
+		}
+		$.ajax(
+		{
+			type: "GET",
+			url: sURL,
+			dataType: "xml",
+			success: function (xmlResponse)
+			{
+				oThis.xResponse = xmlResponse;
+				if(typeof oThis.xResponse != "object")
+				{
+					oThis.Mask();
+					if(typeof oThis.xResponse=="string")
+					{
+						if(oThis.xResponse.toUpperCase().indexOf("ERROR=8")!=-1)
+						{
+							return oThis._Finish();
+						}
+						else
+						{
+							return oThis._Error({ sId: "error-parse" });
+						}
+					}
+					else
+					{
+						return oThis._Error({ sId: "error-parse" });
+					}
+				}
+				oThis.jxSession = $(oThis.xResponse);
+				if(oThis.jxSession.find("structure > course_id").length < 1)
+				{
+					oThis.Mask();
+					return oThis._Error({ sId: "error-session-doc" });
+				}
+				if(Object.keys(oThis.oItems).length==0)
+				{
+					oThis.InitCourse();
+					if(oThis.oConfig.sPartCode!="" && oThis.oCourseConfig.bOpenLastVisited)
+					{
+						var oItem = oThis._GetItemByCode({ sCode: oThis.oConfig.sPartCode });
+						if(oItem!=null)
+						{
+							if(oItem._IsCompleted() && oThis.oCourseConfig.bOpenNextAfterCompleted)
+							{
+								var oNext = oThis._GetNextItem({ sCode: oItem.sCode });
+								if(oNext!=null)
+								{
+									oItem = oNext;
+								}
+							}
+							oThis.oConfig.sPartCode = oItem.sCode;
+							oItem.Launch();
+						}
+					}
+					else if(oThis.oCourseConfig.sStatus=="n" && oThis.oCourseConfig.bOpenFirstModule)
+					{
+						if(Object.keys(oThis.oItems).length!=0)
+						{
+							oThis.oItems[Object.keys(oThis.oItems)[0]].Launch();
+						}
+					}
+					else if(Object.keys(oThis.oItems).length==1 && oThis.oCourseConfig.bOpenSingleModule)
+					{
+						oThis.oItems[Object.keys(oThis.oItems)[0]].Launch();
+					}
+					else
+					{
+						if(oThis.sPlayerType=="cp")
+						{
+							oThis.oMenu["contents"].Open();
+						}
+					}
+					oThis.UpdateInfo({ bProceed: true, bInit: bInit });
+					oThis.Mask();
+					oThis.Show();
+				}
+				else
+				{
+					oThis.UpdateCourseData();
+					oThis.oCover.oGallery.Update();
+					oThis.oCover.oGrid.Update();
+					oThis.UpdateInfo({ bProceed: true, bInit: false });
+					oThis.bAllLoaded = true;
+				}
+				if(oArgs.fn!=null)
+				{
+					oArgs.fn();
+				}
+				return true;
+			},
+			complete: function (jx, sStatus)
+			{
+				if(sStatus!="success")
+				{
+					oThis.Mask();
+					if(jx.responseText.toUpperCase().indexOf("ERROR=0")!=-1)
+					{
+						if(jx.responseText.toUpperCase().indexOf("SESSION=F")!=-1)
+						{
+							return oThis._Warning();
+						}
+					}
+					else
+					{
+						if(jx.responseText.toUpperCase().indexOf("SESSION=F")!=-1)
+						{
+							return oThis._Warning();
+						}
+						else
+						{
+							return oThis._Error({ sId: "error-structure", sText: sStatus });
+						}
+					}
+				}
+				return false;
+			},
+			failure: function (jx, sStatus)
+			{
+				oThis.Mask();
+				return oThis._Error({ sId: "failure-structure" });
+			}
+		});
+	};
+	CP.prototype.Update = function (oArgs)
+	{
+		if(this.bIsCompleted || this.bIsUnloaded)
+		{
+			return false;
+		}
+		if(oArgs==null || oArgs.bProceed!=true)
+		{
+			this.Mask({ bOn: true });
+			this.LoadStructure({ bInit: false });
+			return true;
+		}
+		var bInit = (oArgs.bInit==true);
+		this.UpdateInfo({ bInit: bInit });
+		return this;
+	};
+	CP.prototype.UpdateCourseData = function (oArgs)
+	{
+		var oThis = this;
+		this.oCourseConfig.sCourseId = this.jxSession.find("structure > course_id").text();
+		this.oCourseConfig.iCourseW = +this.jxSession.find("structure > win_width").text();
+		this.oCourseConfig.iCourseH = +this.jxSession.find("structure > win_height").text();
+		this.oCourseConfig.bMoreThanOneModule = (this.jxSession.find("structure > parts > part").length > 1);
+		this.oCourseConfig.sViewType = this.jxSession.find("structure > view_type").text();
+		if(this.bMobileX && this.oCourseConfig.sViewType!="structure")
+		{
+			this.oCourseConfig.bOpenSingleModule = true;
+			this.oCourseConfig.bOpenFirstModule = true;
+			this.oCourseConfig.bOpenLastVisited = true;
+		}
+		else
+		{
+			this.oCourseConfig.bOpenSingleModule = (this.jxSession.find("structure > settings > open_single_module").text()!="0");
+			this.oCourseConfig.bOpenFirstModule = (this.jxSession.find("structure > settings > open_first_module").text()!="0");
+			this.oCourseConfig.bOpenLastVisited = (this.jxSession.find("structure > settings > open_last_visited").text()!="0");
+		}
+		this.oCourseConfig.bOpenNextAfterCompleted = (this.jxSession.find("structure > settings > open_next_after_completed").text()!="0");
+		this.oCourseConfig.bEnableUserCompletion = (this.jxSession.find("structure > settings > enable_user_completion").text()!="0");
+		this.oCourseConfig.bDisplayCompletionMsg = (this.jxSession.find("structure > settings > display_completion_msg").text()!="0");
+		this.oCourseConfig.bDisplayProceedMsg = (this.jxSession.find("structure > settings > display_proceed_msg").text()!="0");
+		this.oCourseConfig.sCompletionMsg = this.jxSession.find("structure > settings > completion_msg").text();
+		this.oCourseConfig.sProceedMsg = this.jxSession.find("structure > settings > proceed_msg").text();
+		this.oCourseConfig.sFinishAction = this.jxSession.find("structure > settings > course_finish_action").text();
+		this.oCourseConfig.sFinishMsg = this.jxSession.find("structure > settings > course_finish_msg").text();
+		this.oCourseConfig.bAllowChecks = (this.jxSession.find("structure > settings > allow_checks").text()!="0");
+		this.oCourseConfig.sAfterChecks = this.jxSession.find("structure > settings > after_checks").text();
+		this.oCourseConfig.sCourseName = this.jxSession.find("structure > course_name").text();
+		this.oCourseConfig.sUserName = this.jxSession.find("structure > person_fullname").text();
+		this.oCourseConfig.sUserName = this.jxSession.find("structure > person_fullname").text();
+		if(this.oCourseConfig.sLastModuleCode=="")
+		{
+			this.oCourseConfig.sLastModuleCode = this.jxSession.find("structure > last_usage_part_code").text();
+		}
+		this.sISOAppointed = this.jxSession.find("structure > start_usage_date").text();
+		this.sISODue = this.jxSession.find("structure > max_end_date").text();
+		this.oCourseConfig.sDateAppointed = (this.sISOAppointed!="") ? TOOLS.DateStringFromISO8601({ sISODate: this.sISOAppointed }) : "-";
+		this.oCourseConfig.sDateDue = (this.sISODue!="") ? TOOLS.DateStringFromISO8601({ sISODate: this.sISODue }) : "-";
+		this.oCourseConfig.sStatus = this.oStatus[this.jxSession.find("structure > state_id").text()];
+		this.oCourseConfig.sPreStatus = this.oStatus[this.jxSession.find("structure > pre_state_id").text()];
+		this.oCourseConfig.sTotal = this.jxSession.find("structure > score").text();
+		this.oCourseConfig.sMaxScore = this.jxSession.find("structure > max_score").text();
+		this.oCourseConfig.sMasteryScore = this.jxSession.find("structure > mastery_score").text();
+		var jxParts = this.jxSession.find("structure > parts > part");
+		var jxPart;
+		var sCode;
+		var oItem;
+		var sGUID;
+		for(var i=0; i<jxParts.length; i++)
+		{
+			jxPart = $(jxParts[i]);
+			sCode = jxPart.children("code").text();
+			oItem = this._GetItemByCode({ sCode: sCode });
+			if(oItem==null)
+			{
+				sGUID = TOOLS.GUID();
+				this.oItems[sGUID] = new CPItem({ oPlayer: this, sId: sGUID, jxPart: jxPart });
+			}
+			else
+			{
+				oItem.Update({ jxPart: jxPart });
+			}
+		}
+		this.oMenu["contents"].Update();
+		if(this.jxSession.find("structure > session").length!=0)
+		{
+			if(this.jxSession.find("structure > session").text()=="f")
+			{
+				if(oThis.oMenu["contents"].oBtns["finish"]!=null)
+				{
+					oThis.oMenu["contents"].oBtns["finish"].Hide();
+				}
+				if(oThis.oCourseConfig.sFinishAction=="continue_msg")
+				{
+					if(!oThis.bFinishMsgShown)
+					{
+						if(oThis.oCourseConfig.sFinishMsg!=null && oThis.oCourseConfig.sFinishMsg!="")
+						{
+							oThis.oMsgs["finish_msg"].SetText({ sText: oThis.oCourseConfig.sFinishMsg });
+						}
+						oThis.oMsgs["finish_msg"].Show();
+						oThis.bFinishMsgShown = true;
+					}
+				}
+				else if(oThis.oCourseConfig.sFinishAction=="continue_no_msg")
+				{
+					return true;
+				}
+				else
+				{
+					return (oThis.bMobileX ? oThis._Warning({ sMsg:  oThis._GetString({ sId: "mobilex-course-completed" }) }) : oThis._Warning({ sMsg: oThis.oCourseConfig.sFinishMsg }) );
+				}
+			}
+		}
+		return this;
+	};
+	CP.prototype.UpdateInfo = function (oArgs)
+	{
+		if(this.bIsCompleted || this.bIsUnloaded)
+		{
+			return false;
+		}
+		if(oArgs==null || oArgs.bProceed!=true)
+		{
+			this.LoadStructure({ bInit: false });
+			return true;
+		}
+		var bInit = (oArgs.bInit==true);
+		this.oMenu["contents"].Update({ bInit: bInit });
+		if(this.oCourseConfig.bEnableUserCompletion || (this._IsCompleted() && !this.oCourseConfig.bDynamic))
+		{
+			this.oMenu["contents"].oBtns["finish"].Show().Enable();
+			if(this.oConfig.bEnableCourseMsg && !this.bMsgShown)
+			{
+				if(this.oCourseConfig.sStatus=="c")
+				{
+					if(this.oCourseConfig.sPreStatus=="f")
+					{
+						this.oMsgs["course_completed"].SetText({ sText: this._GetString({ sId: "course-failed" }) }).Show();
+					}
+					else if(this.oCourseConfig.sPreStatus=="p")
+					{
+						this.oMsgs["course_completed"].SetText({ sText: this._GetString({ sId: "course-passed" }) }).Show();
+					}
+					this.bMsgShown = true;
+				}
+			}
+		}
+		else
+		{
+			this.oMenu["contents"].oBtns["finish"].Hide();
+		}
+		if(this.jxSession.find("structure > session").length!=0)
+		{
+			if(this.jxSession.find("structure > session").text()=="f")
+			{
+				if(this.oMenu["contents"].oBtns["finish"]!=null)
+				{
+					this.oMenu["contents"].oBtns["finish"].Hide();
+				}
+			}
+		}
+		if(!this.bMobileX)
+		{
+			this.oMenu["contents"].oBtns["close-player"].Show().Enable();
+		}
+		var sPrevKey = "";
+		var bCheckNext = false;
+		if(this.sPlayerType=="cp")
+		{
+			this.oBtns["prev"].Disable();
+			this.oBtns["next"].Disable();
+			if(this.oCurrentItem!=null)
+			{
+				for(var sKey in this.oItems)
+				{
+					if(this.oItems.hasOwnProperty(sKey))
+					{
+						if(this.oItems[sKey].sCode==this.oCourseConfig.sLastModuleCode)
+						{
+							if(sPrevKey!="" && this.oItems[sPrevKey].bLaunchable)
+							{
+								this.oBtns["prev"].Enable();
+							}
+							sPrevKey = sKey;
+							bCheckNext = true;
+							continue;
+						}
+						if(bCheckNext)
+						{
+							if(this.oItems[sKey].bLaunchable)
+							{
+								this.oBtns["next"].Enable();
+							}
+							break;
+						}
+						sPrevKey = sKey;
+					}
+				}
+			}
+		}
+		return this;
+	};
+	CP.prototype.ShowCommentForm = function (oArgs)
+	{
+		if(this.sPlayerType=="cp")
+		{
+			if(oArgs.bComment)
+			{
+				this.oMenu["comment"].Open();
+			}
+			else
+			{
+				this.oMenu["comment"].Close();
+			}
+		}
+		return this;
+	};
+	CP.prototype.SetComments = function (oArgs)
+	{
+		if(this.sPlayerType=="cp")
+		{
+			if(oArgs.oItem.sItemURL!=null)
+			{
+				if(oArgs.oItem.sItemURL.indexOf("comment=1")!=-1)
+				{
+					this.oMenu["comment"].oBtns["comment"].Enable();
+					this.oMenu["contents"].oBtns["comments"].Enable();
+				}
+				else
+				{
+					this.oMenu["comment"].oBtns["comment"].Disable();
+					this.oMenu["contents"].oBtns["comments"].Disable();
+				}
+			}
+			else
+			{
+				this.oMenu["comment"].oBtns["comment"].Disable();
+				this.oMenu["contents"].oBtns["comments"].Disable();
+			}
+		}
+		return this;
+	};
+	CP.prototype.UIEvent = function (oArgs)
+	{
+		var oThis = this;
+		var sKey;
+		var oNextItem = null;
+		if(!(oThis instanceof CP))
+		{
+			oThis = oArgs.oThis;
+			if(!(oThis instanceof CP) && oArgs.oArgs!=null)
+			{
+				oThis = oArgs.oArgs.oThis;
+				if(!(oThis instanceof CP))
+				{
+					return this;
+				}
+			}
+		}
+		if(oArgs.oArgs!=null)
+		{
+			switch(oArgs.oArgs.sAction)
+			{
+				case "next-module":
+				{
+					oThis.oMsgs[oArgs.oArgs.sMsgId].Hide();
+					if(oThis.oMsgs[oArgs.oArgs.sMsgId].bRating && oThis.oMsgs[oArgs.oArgs.sMsgId].iRating!=0)
+					{
+						oThis.Rate({ sCode: oThis.oCurrentItem.sCode, iRating: oThis.oMsgs[oArgs.oArgs.sMsgId].iRating });
+					}
+					oNextItem = oThis._GetNextItem({ sCode: oThis.oCurrentItem.sCode });
+					if(oNextItem!=null)
+					{
+						oNextItem.Launch();
+					}
+					break;
+				}
+				case "incomplete-module":
+				{
+					oThis.oMsgs[oArgs.oArgs.sMsgId].Hide();
+					if(oThis.oMsgs[oArgs.oArgs.sMsgId].bRating && oThis.oMsgs[oArgs.oArgs.sMsgId].iRating!=0)
+					{
+						oThis.Rate({ sCode: oThis.oCurrentItem.sCode, iRating: oThis.oMsgs[oArgs.oArgs.sMsgId].iRating });
+					}
+					var oIncItem = oThis._GetIncompleteItem();
+					if(oIncItem!=null)
+					{
+						oIncItem.Launch();
+					}
+					break;
+				}
+				case "finish":
+				{
+					oThis.oMsgs[oArgs.oArgs.sMsgId].Hide();
+					oThis.Complete();
+					break;
+				}
+				case "restart":
+				{
+					oThis.oMsgs[oArgs.oArgs.sMsgId].Hide();
+					oThis.Complete({ bRestart: true });
+					break;
+				}
+				case "cancel":
+				{
+					if(oThis.oMsgs[oArgs.oArgs.sMsgId].bRating && oThis.oMsgs[oArgs.oArgs.sMsgId].iRating!=0)
+					{
+						oThis.Rate({ sCode: oThis.oCurrentItem.sCode, iRating: oThis.oMsgs[oArgs.oArgs.sMsgId].iRating });
+					}
+					oThis.bMsgShown = true;
+					oThis.oMsgs[oArgs.oArgs.sMsgId].Hide();
+					break;
+				}
+			}
+		}
+		else
+		{
+			switch(oArgs.sAction)
+			{
+				case "contents":
+				{
+					oThis.oMenu["contents"].Open();
+					break;
+				}
+				case "next":
+				{
+					var bBreak = false;
+					oNextItem = null;
+					for(sKey in oThis.oItems)
+					{
+						if(oThis.oItems[sKey].sType!="folder" && oThis.oItems[sKey].sType!="activity")
+						{
+							if(bBreak)
+							{
+								oNextItem = oThis.oItems[sKey];
+								break;
+							}
+							bBreak = (oThis.oItems[sKey]==oThis.oCurrentItem);
+						}
+					}
+					if(oNextItem!=null)
+					{
+						oNextItem.Launch();
+					}
+					break;
+				}
+				case "prev":
+				{
+					var oPrevItem = null;
+					for(sKey in oThis.oItems)
+					{
+						if(oThis.oItems[sKey].sType!="folder" && oThis.oItems[sKey].sType!="activity")
+						{
+							if(oThis.oItems[sKey]==oThis.oCurrentItem)
+							{
+								break;
+							}
+							oPrevItem = oThis.oItems[sKey];
+						}
+					}
+					if(oPrevItem!=null)
+					{
+						oPrevItem.Launch();
+					}
+					break;
+				}
+				case "finish":
+				{
+					oThis.Complete();
+					break;
+				}
+				case "switch":
+				{
+					if(oThis.oMenu["contents"].bOpen)
+					{
+						oThis.oMenu["contents"].Close({ oElem: oArgs.oElem });
+					}
+					else
+					{
+						oThis.oMenu["contents"].Open({ oElem: oArgs.oElem });
+					}
+					break;
+				}
+			}
+		}
+		return this;
+	};
+}
+{ // CPCourse
+	window.CPCourse = function (oArgs)
+	{
+		WTBaseObject.call(this, { oPlayer: this });
+		this.Constructor();
+		return this;
+	};
+	CPCourse.prototype = Object.create(WTBaseObject.prototype);
+	CPCourse.prototype.constructor = CPCourse;
+	CPCourse.prototype.Constructor = function (oArgs)
+	{
+		return this;
+	};
+}
+{ // CPCover
+	window.CPCover = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jContainer = oArgs.jContainer;
+		this.oBtns = {};
+		this.Constructor();
+		return this;
+	};
+	CPCover.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		this.jCourseTitle = this.jContainer.find("[wt-role='course-title']").html(this.oPlayer.oCourseConfig.sCourseName);
+		this.jPageCurrent = this.jContainer.find("[wt-role='page-1']");
+		this.jPageArchive = this.jContainer.find("[wt-role='page-2']");
+		this.jMsgBlock = this.jPageCurrent.find("[wt-role='msg-block']");
+		this.jGalleryBlock = this.jPageCurrent.find("[wt-role='gallery-block']");
+		this.jGreetingBlock = this.jPageCurrent.find("[wt-role='greeting-block']");
+		this.jProgressBlock = this.jPageCurrent.find("[wt-role='progress-block']");
+		this.jGridList = this.jPageArchive.find("[wt-role='grid-list']");
+		this.jSearchBlock = this.jPageArchive.find("[wt-role='search-block']");
+		this.jSearchFld = this.jPageArchive.find("[wt-role='search-fld']");
+		this.jContainer.find("[wt-btn]").each(function ()
+		{
+			var sBtnId = this.getAttribute("wt-role");
+			oThis.oBtns[sBtnId] = new CPButton({ oPlayer: oThis.oPlayer, oTarget: oThis, oElem: this, fn: oThis.UIEvent, sAction: sBtnId });
+		});
+		this.oGallery = new CPGallery({ oPlayer: this.oPlayer, jContainer: this.jGalleryBlock, oParent: this });
+		this.oGrid = new CPGrid({ oPlayer: this.oPlayer, jContainer: this.jPageArchive, oParent: this });
+		this.oSearch = new CPSearch({ oPlayer: this.oPlayer, jContainer: this.jSearchBlock, oParent: this, oTarget: this.oGrid });
+		return this;
+	};
+	CPCover.prototype.Hide = function (oArgs)
+	{
+		this.jContainer.fadeOut(400);
+		return this;
+	};
+	CPCover.prototype.Show = function (oArgs)
+	{
+		this.oGallery.Update();
+		this.oGrid.Update();
+		this.jContainer.show();
+		return this;
+	};
+	CPCover.prototype.UIEvent = function (oArgs)
+	{
+		switch(oArgs.sAction)
+		{
+			case "btn-gallery-next":
+			{
+				break;
+			}
+			case "btn-gallery-prev":
+			{
+				break;
+			}
+			case "btn-archive":
+			{
+				if(this.sCurrentPage=="archive")
+				{
+					this.oBtns[oArgs.sAction].jBtn.removeAttr("wt-selected");
+					this.jPageCurrent.css({ "display": "flex" });
+					this.jPageArchive.hide();
+					this.sCurrentPage = "";
+				}
+				else
+				{
+					this.oBtns[oArgs.sAction].jBtn.attr({ "wt-selected": "1" });
+					this.jPageCurrent.hide();
+					this.jPageArchive.css({ "display": "flex" });
+					this.sCurrentPage = "archive";
+				}
+				break;
+			}
+			case "btn-close":
+			{
+				if(this.oPlayer.oCourseConfig.sJumpToURL!=null && this.oPlayer.oCourseConfig.sJumpToURL!="")
+				{
+					document.location.href = this.oPlayer.oCourseConfig.sJumpToURL;
+					return true;
+				}
+				else
+				{
+					window.close();
+					if(!window.closed)
+					{
+						alert(this.oPlayer._GetString({ sId: "cannot-close" }));
+					}
+				}
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPGallery
+	window.CPGallery = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jContainer = oArgs.jContainer;
+		this.oParent = oArgs.oParent;
+		this.oList = {};
+		this.oBtns = {};
+		this.oCurrentItem = null;
+		this.Constructor().Update();
+		return this;
+	};
+	CPGallery.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		var sKey;
+		this.jList = this.jContainer.find("[wt-role='gallery-list']");
+		this.jProgressList = this.jContainer.find("[wt-role='progress-list']");
+		this.jItemTemplate = this.oPlayer.jStorage.find("[wt-template='gallery-item']");
+		this.jProgressItemTemplate = this.oPlayer.jStorage.find("[wt-template='progress-item']");
+		this.jTagItemTemplate = this.oPlayer.jStorage.find("[wt-template='tag-item']");
+		this.jContainer.find("[wt-gallery-btn]").each(function ()
+		{
+			var sBtnId = this.getAttribute("wt-role");
+			oThis.oBtns[sBtnId] = new CPButton({ oPlayer: oThis.oPlayer, oTarget: oThis, oElem: this, fn: oThis.UIEvent, sAction: sBtnId });
+		});
+		return this;
+	};
+	CPGallery.prototype.Update = function (oArgs)
+	{
+		var oThis = this;
+		var sKey;
+		var i;
+		var aToRemove = [];
+		for(sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oCourseConfig.bDynamic || (!this.oPlayer.oCourseConfig.bDynamic && (this.oPlayer.oItems[sKey].sStateId=="0" || this.oPlayer.oItems[sKey].sStateId=="1")))
+			{
+				if(this.oList[sKey]==null && this.oPlayer.oItems[sKey].sDynamicStatus!="archive")
+				{
+					this.oList[sKey] = new CPGalleryItem({ oPlayer: this.oPlayer, oList: this, oItem: this.oPlayer.oItems[sKey] });
+					this.oList[sKey].jItem.fadeIn(400);
+					this.oList[sKey].sKey = sKey;
+					this.oList[sKey].jProgressItem = this.jProgressItemTemplate.clone(true).removeAttr("wt-template").appendTo(this.jProgressList);
+				}
+				else if(this.oList[sKey]!=null && this.oPlayer.oItems[sKey].sDynamicStatus=="archive")
+				{
+					this.oList[sKey].Delete();
+					aToRemove.push(sKey);
+				}
+			}
+		}
+		for(i=0; i<aToRemove.length; i++)
+		{
+			delete this.oList[aToRemove[i]];
+		}
+		switch(Object.keys(this.oList).length)
+		{
+			case 0:
+			{
+				this.oCurrentItem = null;
+				this.oParent.jProgressBlock.hide();
+				this.oParent.jGalleryBlock.hide();
+				this.oParent.jMsgBlock.show();
+				break;
+			}
+			case 1:
+			{
+				this.oCurrentItem = this.oList[Object.keys(this.oList)[0]];
+				this.oParent.jProgressBlock.hide();
+				this.oParent.jMsgBlock.hide();
+				this.oBtns["btn-gallery-prev"].Hide();
+				this.oBtns["btn-gallery-next"].Hide();
+				break;
+			}
+			default:
+			{
+				this.oParent.jMsgBlock.hide();
+				var iCnt = 0;
+				for(sKey in this.oList)
+				{
+					if(this.oList.hasOwnProperty(sKey))
+					{
+						if(iCnt!=0)
+						{
+							this.oList[sKey].Hide({ bInstant: true });
+						}
+						else
+						{
+							this.oCurrentItem = this.oList[sKey];
+							this.oCurrentItem.jProgressItem.attr({ "wt-selected": "1" });
+						}
+						iCnt++;
+					}
+				}
+				this.oBtns["btn-gallery-prev"].Disable();
+				this.oBtns["btn-gallery-next"].Enable();
+				break;
+			}
+		}
+		return this;
+	};
+	CPGallery.prototype.UIEvent = function (oArgs)
+	{
+		var bFlag;
+		var sKey;
+		var oNewItem = null;
+		switch(oArgs.sAction)
+		{
+			case "btn-gallery-next":
+			{
+				bFlag = false;
+				for(sKey in this.oList)
+				{
+					if(this.oList.hasOwnProperty(sKey))
+					{
+						if(bFlag)
+						{
+							oNewItem = this.oList[sKey];
+							break;
+						}
+						if(sKey==this.oCurrentItem.sKey)
+						{
+							bFlag = true;
+						}
+					}
+				}
+				if(bFlag && oNewItem!=null)
+				{
+					this.oCurrentItem.Hide({ sDir: "next" });
+					oNewItem.Show({ sDir: "next" });
+					this.oCurrentItem = oNewItem;
+					bFlag = false;
+					var bNext = false;
+					for(sKey in this.oList)
+					{
+						if(this.oList.hasOwnProperty(sKey))
+						{
+							if(bFlag && !bNext)
+							{
+								bNext = true;
+							}
+							if(sKey==this.oCurrentItem.sKey)
+							{
+								this.oCurrentItem.jProgressItem.attr({ "wt-selected": "1" });
+								bFlag = true;
+							}
+							else
+							{
+								this.oCurrentItem.jProgressItem.removeAttr("wt-selected");
+							}
+						}
+					}
+					if(bNext)
+					{
+						this.oBtns["btn-gallery-next"].Enable();
+					}
+					else
+					{
+						this.oBtns["btn-gallery-next"].Disable();
+					}
+				}
+				this.oBtns["btn-gallery-prev"].Enable();
+				break;
+			}
+			case "btn-gallery-prev":
+			{
+				bFlag = false;
+				for(sKey in this.oList)
+				{
+					if(this.oList.hasOwnProperty(sKey))
+					{
+						if(sKey==this.oCurrentItem.sKey)
+						{
+							bFlag = true;
+							break;
+						}
+						oNewItem = this.oList[sKey];
+					}
+				}
+				if(bFlag && oNewItem!=null)
+				{
+					this.oCurrentItem.Hide({ sDir: "prev" });
+					oNewItem.Show({ sDir: "prev" });
+					this.oCurrentItem = oNewItem;
+					bFlag = false;
+					var iCnt = 0;
+					var iCur = 0;
+					for(sKey in this.oList)
+					{
+						if(sKey==this.oCurrentItem.sKey)
+						{
+							this.oCurrentItem.jProgressItem.attr({ "wt-selected": "1" });
+							iCur = iCnt;
+						}
+						else
+						{
+							this.oCurrentItem.jProgressItem.removeAttr("wt-selected");
+							iCnt++;
+						}
+					}
+					if(iCur!=0)
+					{
+						this.oBtns["btn-gallery-prev"].Enable();
+					}
+					else
+					{
+						this.oBtns["btn-gallery-prev"].Disable();
+					}
+				}
+				this.oBtns["btn-gallery-next"].Enable();
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPGalleryItem
+	window.CPGalleryItem = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.oList = oArgs.oList;
+		this.oItem = oArgs.oItem;
+		this.oBtns = {};
+		this.Constructor();
+		return this;
+	};
+	CPGalleryItem.prototype.Constructor = function (oArgs)
+	{
+		var i;
+		var oThis = this;
+		this.jItem = this.oList.jItemTemplate.clone(true).removeAttr("wt-template").appendTo(this.oList.jList);
+		this.jItem.find("[wt-role='gallery-item-img']").css({ "background-image": "url('" + this.oItem.sIconURL + "')" });
+		this.jItem.find("[wt-role='gallery-item-title']").html(this.oItem.sTitle);
+		if(this.oItem.nMaxScore==null || this.oItem.nMaxScore=="")
+		{
+			this.jItem.find("[wt-role='item-score']").hide();
+		}
+		else
+		{
+			this.jItem.find("[wt-role='score-value']").html(this.oItem.nMaxScore);
+		}
+		this.jItem.find("[wt-role='item-desc']").html(this.oItem.sDesc);
+		var jRatingItems = this.jItem.find("[wt-role='rating-item']");
+		if(this.oItem.iLearningTime==0)
+		{
+			this.jItem.find("[wt-role='item-timing']").hide();
+		}
+		else if(this.oItem.iLearningTime>60)
+		{
+			this.jItem.find("[wt-role='timing-h-value']").html(Math.floor(this.oItem.iLearningTime/60));
+			this.jItem.find("[wt-role='timing-min-value']").html(this.oItem.iLearningTime%60);
+		}
+		else
+		{
+			this.jItem.find("[wt-role='timing-h-block']").hide();
+			this.jItem.find("[wt-role='timing-min-value']").html(this.oItem.iLearningTime);
+		}
+		for(i=0; i<this.oItem.iRating; i++)
+		{
+			jRatingItems[i].setAttribute("wt-selected", "1");
+		}
+		var jTagList = this.jItem.find("[wt-role='tag-list']");
+		for(i=0; i<this.oItem.aTags.length; i++)
+		{
+			this.oList.jTagItemTemplate.clone(true).removeAttr("wt-template").html(this.oItem.aTags[i].sName).appendTo(jTagList);
+		}
+		this.jItem.find("[wt-btn]").each(function ()
+		{
+			var sBtnId = this.getAttribute("wt-role");
+			oThis.oBtns[sBtnId] = new CPButton({ oPlayer: oThis.oPlayer, oTarget: oThis, oElem: this, fn: oThis.UIEvent, sAction: sBtnId });
+		});
+		return this;
+	};
+	CPGalleryItem.prototype.Delete = function (oArgs)
+	{
+		this.MoveToArchive();
+		this.jItem.remove();
+		return this;
+	};
+	CPGalleryItem.prototype.Hide = function (oArgs)
+	{
+		this.jItem.hide();
+		return this;
+	};
+	CPGalleryItem.prototype.MoveToArchive = function (oArgs)
+	{
+		var oThis = this;
+		var oOffset = this.jItem.offset();
+		var oTargetOffset = this.oPlayer.oCover.oBtns["btn-archive"].jBtn.offset();
+		var jGhost = $(document.createElement("div")).css({ "left": oOffset.left + "px", "top": oOffset.top + "px", "width": this.jItem.width() + "px", "height": this.jItem.height() + "px" }).addClass("cpx-item-ghost").appendTo("body");
+		jGhost.animate({ "width": "0", "height": "0", "left": oTargetOffset.left + "px", "top": (oTargetOffset.top + this.oPlayer.oCover.oBtns["btn-archive"].jBtn.height()) + "px" }, 400, function () { jGhost.remove(); });
+		return this;
+	};
+	CPGalleryItem.prototype.Show = function (oArgs)
+	{
+		this.jItem.show();
+		return this;
+	};
+	CPGalleryItem.prototype.UIEvent = function (oArgs)
+	{
+		switch(oArgs.sAction)
+		{
+			case "btn-proceed":
+			{
+				// launch here
+				this.oPlayer.oCover.Hide();
+				this.oItem.UIEvent.call(this.oItem, { oEvt: { type: "click" } });
+				break;
+			}
+			case "btn-skip":
+			{
+				this.oPlayer.Skip({ oItem: this.oItem });
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPGrid
+	window.CPGrid = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jContainer = oArgs.jContainer;
+		this.oParent = oArgs.oParent;
+		this.oList = {};
+		this.Constructor().Update();
+		return this;
+	};
+	CPGrid.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		var sKey;
+		this.jList = this.jContainer.find("[wt-role='grid-list']");
+		this.jItemTemplate = this.oPlayer.jStorage.find("[wt-template='grid-item']");
+		this.jTagItemTemplate = this.oPlayer.jStorage.find("[wt-template='tag-item']");
+		this.jTopCounter = this.oParent.oBtns["btn-archive"].jBtn.find("[wt-role='archive-counter']");
+		this.jMenuCounter = this.oPlayer.oMenu["contents"].oBtns["tab-archive"].jBtn.find("[wt-role='archive-counter']");
+		return this;
+	};
+	CPGrid.prototype.Filter = function (oArgs)
+	{
+		var i,j;
+		var sKey;
+		var bFound;
+		if(oArgs.sValue=="")
+		{
+			for(sKey in this.oList)
+			{
+				if(this.oList.hasOwnProperty(sKey))
+				{
+					this.oList[sKey].Show();
+				}
+			}
+		}
+		else
+		{
+			var sValue = $.trim(oArgs.sValue);
+			var aTokens = [ sValue.toLowerCase() ];
+			if(sValue.indexOf(" ")!=-1)
+			{
+				aTokens = sValue.split(" ");
+			}
+			for(sKey in this.oList)
+			{
+				if(this.oList.hasOwnProperty(sKey))
+				{
+					bFound = false;
+					_loop2:
+					for(i=0; i<aTokens.length; i++)
+					{
+						if(aTokens[i]=="" || aTokens[i]==" ")
+						{
+							continue;
+						}
+						if(this.oList[sKey].oItem.sTitle.toLowerCase().indexOf(aTokens[i])!=-1)
+						{
+							bFound = true;
+							break;
+						}
+						if(this.oList[sKey].oItem.sDesc.toLowerCase().indexOf(aTokens[i])!=-1)
+						{
+							bFound = true;
+							break;
+						}
+						if(this.oList[sKey].oItem.aTags!=null)
+						{
+							for(j=0; j<this.oList[sKey].oItem.aTags.length; i++)
+							{
+								if(this.oList[sKey].oItem.aTags[j].sName.toLowerCase().indexOf(aTokens[i])!=-1)
+								{
+									bFound = true;
+									break _loop2;
+								}
+							}
+						}
+					}
+					if(bFound)
+					{
+						this.oList[sKey].Show();
+					}
+					else
+					{
+						this.oList[sKey].Hide();
+					}
+				}
+			}
+		}
+		return this;
+	};
+	CPGrid.prototype.Update = function (oArgs)
+	{
+		var oThis = this;
+		var sKey;
+		var i;
+		var aToRemove = [];
+		for(sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oCourseConfig.bDynamic || (!this.oPlayer.oCourseConfig.bDynamic && (this.oPlayer.oItems[sKey].sStateId!="0" && this.oPlayer.oItems[sKey].sStateId!="1")))
+			{
+				if(this.oList[sKey]==null && this.oPlayer.oItems[sKey].sDynamicStatus=="archive")
+				{
+					this.oList[sKey] = new CPGridItem({ oPlayer: this.oPlayer, oList: this, oItem: this.oPlayer.oItems[sKey] });
+					this.oList[sKey].sKey = sKey;
+				}
+				else if(this.oList[sKey]!=null && this.oPlayer.oItems[sKey].sDynamicStatus!="archive")
+				{
+					this.oList[sKey].Delete();
+					aToRemove.push(sKey);
+				}
+
+			}
+		}
+		for(i=0; i<aToRemove.length; i++)
+		{
+			delete this.oList[aToRemove[i]];
+		}
+		this.jTopCounter.html(Object.keys(this.oList).length);
+		this.jMenuCounter.html(Object.keys(this.oList).length);
+		return this;
+	};
+}
+{ // CPGridItem
+	window.CPGridItem = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.oList = oArgs.oList;
+		this.oItem = oArgs.oItem;
+		this.oBtns = {};
+		this.Constructor();
+		return this;
+	};
+	CPGridItem.prototype.Constructor = function (oArgs)
+	{
+		var i;
+		var oThis = this;
+		this.jItem = this.oList.jItemTemplate.clone(true).removeAttr("wt-template").attr({ "wt-state": this.oItem.sStateId }).appendTo(this.oList.jList);
+		this.jItem.find("[wt-role='grid-item-img']").css({ "background-image": "url('" + this.oItem.sIconURL + "')" });
+		this.jItem.find("[wt-role='grid-item-title']").html(this.oItem.sTitle);
+		this.jItem.find("[wt-role='score-value']").html(this.oItem.nMaxScore);
+		this.jItem.find("[wt-role='item-desc']").html(this.oItem.sDesc);
+		var jRatingItems = this.jItem.find("[wt-role='rating-item']");
+		for(i=0; i<this.oItem.iRating; i++)
+		{
+			jRatingItems[i].setAttribute("wt-selected", "1");
+		}
+		var jTagList = this.jItem.find("[wt-role='tag-list']");
+		for(i=0; i<this.oItem.aTags.length; i++)
+		{
+			this.oList.jTagItemTemplate.clone(true).removeAttr("wt-template").html(this.oItem.aTags[i].sName).appendTo(jTagList);
+		}
+		switch(this.oItem.sStateId)
+		{
+			case "0":
+			{
+				if(this.oItem.iLearningTime==0)
+				{
+					this.jItem.find("[wt-role='item-timing']").hide();
+				}
+				else if(this.oItem.iLearningTime>60)
+				{
+					this.jItem.find("[wt-role='timing-h-value']").html(Math.floor(this.oItem.iLearningTime/60));
+					this.jItem.find("[wt-role='timing-min-value']").html(this.oItem.iLearningTime%60);
+				}
+				else
+				{
+					this.jItem.find("[wt-role='timing-h-block']").hide();
+					this.jItem.find("[wt-role='timing-min-value']").html(this.oItem.iLearningTime);
+				}
+				this.jItem.find("[wt-role='item-date']").hide();
+				if(this.oItem.nMaxScore==null || this.oItem.nMaxScore=="")
+				{
+					this.jItem.find("[wt-role='item-score']").hide();
+				}
+				else
+				{
+					this.jItem.find("[wt-role='score-value']").html(this.oItem.nMaxScore);
+				}
+				this.jItem.find("[wt-role='score-total']").hide();
+				break;
+			}
+			case "1":
+			{
+				if(this.oItem.iLearningTime==0)
+				{
+					this.jItem.find("[wt-role='item-timing']").hide();
+				}
+				else if(this.oItem.iLearningTime>60)
+				{
+					this.jItem.find("[wt-role='timing-h-value']").html(Math.floor(this.oItem.iLearningTime/60));
+					this.jItem.find("[wt-role='timing-min-value']").html(this.oItem.iLearningTime%60);
+				}
+				else
+				{
+					this.jItem.find("[wt-role='timing-h-block']").hide();
+					this.jItem.find("[wt-role='timing-min-value']").html(this.oItem.iLearningTime);
+				}
+				this.jItem.find("[wt-role='item-date']").hide();
+				if(this.oItem.nMaxScore==0 || this.oItem.nMaxScore==null || this.oItem.nMaxScore=="")
+				{
+					this.jItem.find("[wt-role='score-value']").hide();
+				}
+				else
+				{
+					this.jItem.find("[wt-role='score-value']").html(this.oItem.nMaxScore);
+				}
+				if(this.oItem.nScore==null || this.oItem.nScore=="")
+				{
+					this.jItem.find("[wt-role='score-total']").hide();
+					if(this.oItem.nMaxScore==null || this.oItem.nMaxScore=="")
+					{
+						this.jItem.find("[wt-role='item-score']").hide();
+					}
+				}
+				else
+				{
+					this.jItem.find("[wt-role='score-total']").html(this.oItem.nScore);
+				}
+				this.jItem.find("[wt-role='score-plus']").hide();
+				break;
+			}
+			default:
+			{
+				this.jItem.find("[wt-role='item-timing']").hide();
+				this.jItem.find("[wt-role='item-date']").html(TOOLS.DateStringFromISO8601({ sISODate: this.oItem.sLastUsageDate }));
+				if(this.oItem.nMaxScore==0 || this.oItem.nMaxScore==null || this.oItem.nMaxScore=="")
+				{
+					this.jItem.find("[wt-role='score-value']").hide();
+				}
+				else
+				{
+					this.jItem.find("[wt-role='score-value']").html(this.oItem.nMaxScore);
+				}
+				if(this.oItem.nScore==null || this.oItem.nScore=="")
+				{
+					this.jItem.find("[wt-role='score-total']").hide();
+					if(this.oItem.nMaxScore==null || this.oItem.nMaxScore=="")
+					{
+						this.jItem.find("[wt-role='item-score']").hide();
+					}
+				}
+				else
+				{
+					this.jItem.find("[wt-role='score-total']").html(this.oItem.nScore);
+				}
+				this.jItem.find("[wt-role='score-plus']").hide();
+				break;
+			}
+		}
+		this.jItem.find("[wt-btn]").each(function ()
+		{
+			var sBtnId = this.getAttribute("wt-role");
+			oThis.oBtns[sBtnId] = new CPButton({ oPlayer: oThis.oPlayer, oTarget: oThis, oElem: this, fn: oThis.UIEvent, sAction: sBtnId });
+		});
+		return this;
+	};
+	CPGridItem.prototype.Delete = function (oArgs)
+	{
+		this.jItem.remove();
+		return this;
+	};
+	CPGridItem.prototype.Hide = function (oArgs)
+	{
+		this.jItem.fadeOut(400);
+		return this;
+	};
+	CPGridItem.prototype.Show = function (oArgs)
+	{
+		this.jItem.css({ "display": "flex" });
+		return this;
+	};
+	CPGridItem.prototype.UIEvent = function (oArgs)
+	{
+		var oThis = this;
+		switch(oArgs.sAction)
+		{
+			case "btn-proceed":
+			{
+				// launch here
+				this.oPlayer.oCover.Hide();
+				this.oItem.UIEvent.call(this.oItem, { oEvt: { type: "click" } });
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPSearch
+	window.CPSearch = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jContainer = oArgs.jContainer;
+		this.oParent = oArgs.oParent;
+		this.oTarget = oArgs.oTarget;
+		this.Constructor();
+		return this;
+	};
+	CPSearch.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		this.jFld = this.jContainer.find("[wt-role='search-fld']").on("focus keyup blur", function (e) { oThis.UIEvent.call(oThis, { oEvt: e, oElem: this }); });
+		return this;
+	};
+	CPSearch.prototype.UIEvent = function (oArgs)
+	{
+		var sValue = this.jFld.val();
+		switch(oArgs.oEvt.type)
+		{
+			case "focus":
+			{
+				this.jContainer.attr({ "wt-active": "1" });
+				break;
+			}
+			case "blur":
+			{
+				if(sValue=="")
+				{
+					this.jContainer.removeAttr("wt-active");
+				}
+				break;
+			}
+			case "keyup":
+			{
+				this.oTarget.Filter({ sValue: sValue });
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPFrame
+	window.CPFrame = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jContainer = oArgs.jContainer;
+		this.jFrame = oArgs.jFrame;
+		this.jWrapper = oArgs.jFrame.parent();
+		this.iResizeWait = 50;
+		this.iResizeStart = 0;
+		this.iResizeTimer = 0;
+		this.iWDTimer = 0;
+		this.sUnloadId = "";
+		this.Constructor();
+		return this;
+	};
+	CPFrame.prototype.Adjust = function (oArgs)
+	{
+		return this;
+	};
+	CPFrame.prototype.Constructor = function (oArgs)
+	{
+		return this;
+	};
+	CPFrame.prototype.Init = function (oArgs)
+	{
+		this.jFrame.attr({ "src": this.oPlayer.oConfig.sSplashURL, "scrolling": "no" }).css({ "overflow": "hidden" });
+		return this;
+	};
+	CPFrame.prototype.Unload = function (oArgs)
+	{
+		var oThis = this;
+		this.sUnloadId = TOOLS.GUID();
+		this.jContainer.hide();
+		this.SetContent({ sType: "blank" });
+		this.iLoadTimer = setInterval(function ()
+		{
+			var oInnerDoc = /*oThis.jFrame[0].contentWindow || */oThis.jFrame[0].contentDocument;
+			if(oInnerDoc.location.search.indexOf(oThis.sUnloadId)!=-1)
+			{
+				clearInterval(oThis.iLoadTimer);
+				oThis.oPlayer.oCurrentItem = null;
+				oThis.jContainer.show();
+				oArgs.fn();
+			}
+		}, 100);
+		return this;
+	};
+	CPFrame.prototype.Resize = function (oArgs)
+	{
+		var oThis = this;
+		var iCurrent = (new Date()).valueOf();
+		if(this.iResizeStart==0)
+		{
+			this.iResizeStart = iCurrent;
+			this.iResizeTimer = setTimeout(function () { oThis.Resize.call(oThis, oArgs); }, this.iResizeWait );
+		}
+		else if(this.iResizeStart!=0 && ((iCurrent - this.iResizeStart) < this.iResizeWait))
+		{
+			this.iResizeStart = iCurrent;
+			clearTimeout(this.iResizeTimer);
+			this.iResizeTimer = setTimeout(function () { oThis.Resize.call(oThis, oArgs); }, this.iResizeWait );
+		}
+		else // do it at last
+		{
+			this.iResizeStart = 0;
+			clearTimeout(this.iResizeTimer);
+			this.Zoom(oArgs);
+		}
+		this.oPlayer.jPanelMask.hide();
+		return this;
+	};
+	CPFrame.prototype.SetContent = function (oArgs)
+	{
+		var oThis = this;
+		var nW, nH;
+		this.WatchDog();
+		var sURL = window.location.href;
+		if(sURL.indexOf("/webtutor/")!=-1)
+		{
+			sURL = sURL.substring(0,sURL.indexOf("/webtutor/")+1);
+		}
+		else
+		{
+			sURL = "";
+		}
+		if(oArgs!=null)
+		{
+			switch(oArgs.sType)
+			{
+				case "completed":
+				{
+					this.jFrame.attr({ "src": sURL + "cplayer/completed.html?lang=" + this.oPlayer.oConfig.sLang + "&uid=" + this.sUnloadId, "scrolling": "no" }).css({ "overflow": "hidden" });
+					this.SetSize();
+					break;
+				}
+				case "blank":
+				{
+					this.jFrame.attr({ "src": sURL + "cplayer/blank.html?lang=" + this.oPlayer.oConfig.sLang + "&uid=" + this.sUnloadId, "scrolling": "no" }).css({ "overflow": "hidden" });
+					this.SetSize();
+					break;
+				}
+				case "start":
+				{
+					this.jFrame.attr({ "src": sURL + "cplayer/start.html?lang=" + this.oPlayer.oConfig.sLang, "scrolling": "no" }).css({ "overflow": "hidden" });
+					this.SetSize();
+					break;
+				}
+				case "finished":
+				{
+					this.jFrame.attr({ "src": sURL + "cplayer/finish.html?lang=" + this.oPlayer.oConfig.sLang, "scrolling": "no" }).css({ "overflow": "hidden" });
+					this.SetSize();
+					break;
+				}
+				case "final":
+				{
+					this.oPlayer.bIsUnloaded = true;
+					this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": "no" }).css({ "overflow": "hidden" });
+					this.SetSize();
+					this.iLoadTimer = setInterval(function ()
+					{
+						var oInnerDoc = oThis.jFrame[0].contentWindow || oThis.jFrame[0].contentDocument;
+						if(oInnerDoc.document)
+						{
+							oInnerDoc = oInnerDoc.document;
+						}
+						if(oInnerDoc.readyState=="interactive" || oInnerDoc.readyState=="complete")
+						{
+							clearInterval(oThis.iLoadTimer);
+							oThis.jFrame[0].contentWindow.close = function ()
+							{
+								try
+								{
+									var sXURL = this.location.href;
+									if(sXURL.indexOf("/webtutor/")!=-1)
+									{
+										sXURL = sXURL.substring(0,sXURL.indexOf("/webtutor/")+1);
+									}
+									else
+									{
+										sXURL = "";
+									}
+									this.location.href = sXURL + "cplayer/start.html?lang=" + oThis.oPlayer.oConfig.sLang;
+								}
+								catch(e)
+								{
+									alert(e);
+								}
+							};
+						}
+					}, 500);
+					oThis.oPlayer.bIsUnloaded = false;
+					break;
+				}
+				default:
+				{
+					this.oPlayer.SetComments({ oItem: this.oPlayer.oCurrentItem });
+					switch(this.oPlayer.oCurrentItem.sType)
+					{
+						case "lesson":
+						case "cl_module":
+						{
+							nW = this.oPlayer.oCurrentItem.nWinW;
+							nH = this.oPlayer.oCurrentItem.nWinH;
+							if(nW=="" || nW==0 || nH=="" || nH==0)
+							{
+								nW = this.oPlayer.oCourseConfig.iCourseW;
+								nH = this.oPlayer.oCourseConfig.iCourseH;
+							}
+							if(nW=="" || nW==0 || nH=="" || nH==0)
+							{
+								nW = 750;
+								nH = 530;
+							}
+
+							this.oPlayer.ResetAPI();
+							this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": (this.oPlayer.oCourseConfig.bAllowScroll ? "yes": "no") }).css({ "overflow": (this.oPlayer.oCourseConfig.bAllowScroll ? "auto": "hidden") });
+							if(this.oPlayer.oCurrentItem.bResizable)
+							{
+								this.SetSize();
+							}
+							else
+							{
+								this.SetSize({ nW: nW, nH: nH, bAdjust: true });
+							}
+							break;
+						}
+						case "test":
+						{
+							this.jFrame.attr({ "src": "/cplayer/test.html?lang=" + this.oPlayer.oConfig.sLang, "scrolling": "no" }).css({ "overflow": "hidden" });
+							this.oTestWindow = window.open(this.oPlayer.oCurrentItem.sItemURL, "TestWindow", "toolbar=no,location=no,status=no,menubar=no,resizable=yes,directories=no,scrollbars=yes,width=" + this.iCourseW + ",height=" + this.iCourseH);
+							this.SetSize();
+							//this.WatchDog({ start: true });
+							break;
+						}
+						case "learning_task":
+						case "inline":
+						case "resource":
+						case "library_material":
+						{
+							this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": "yes" }).css({ "overflow": "auto" });
+							this.SetSize();
+							break;
+						}
+					}
+					break;
+				}
+			}
+		}
+		else
+		{
+			this.oPlayer.SetComments({ oItem: this.oPlayer.oCurrentItem });
+			switch(this.oPlayer.oCurrentItem.sType)
+			{
+				case "lesson":
+				{
+					if(this.oPlayer.oCurrentItem.sImportType=="cmi5")
+					{
+						this.iWDTimer = setTimeout(function () { oThis.WatchDog({ oInstance: oThis, bCheck: true }); }, oThis.oPlayer.oConfig.iWDCheckTime);
+					}
+					else
+					{
+						this.oPlayer.ResetAPI();
+					}
+					this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": (this.oPlayer.oCourseConfig.bAllowScroll ? "yes": "no") }).css({ "overflow": (this.oPlayer.oCourseConfig.bAllowScroll ? "auto": "hidden") });
+					if(this.oPlayer.oCurrentItem.bResizable)
+					{
+						this.SetSize();
+					}
+					else
+					{
+						this.SetSize({ nW: this.oPlayer.oCurrentItem.nWinW, nH: this.oPlayer.oCurrentItem.nWinH, bAdjust: true });
+					}
+					break;
+				}
+				case "cl_module":
+				{
+					this.oPlayer.ResetAPI();
+					this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": (this.oPlayer.oCourseConfig.bAllowScroll ? "yes": "no") }).css({ "overflow": (this.oPlayer.oCourseConfig.bAllowScroll ? "auto": "hidden") });
+					nW = (this.oPlayer.oCurrentItem.nWinW==null || this.oPlayer.oCurrentItem.nWinW==0) ? ((this.oPlayer.bMobile ? this.jContainer.width() : 1280)) : this.oPlayer.oCurrentItem.nWinW;
+					nH = (this.oPlayer.oCurrentItem.nWinH==null || this.oPlayer.oCurrentItem.nWinH==0) ? ((this.oPlayer.bMobile ? this.jContainer.height() : 800)) : this.oPlayer.oCurrentItem.nWinH;
+					if(this.oPlayer.oCurrentItem.bResizable)
+					{
+						this.SetSize();
+					}
+					else
+					{
+						this.SetSize({ nW: nW, nH: nH, bAdjust: true });
+					}
+					break;
+				}
+				case "test":
+				{
+					this.SetSize();
+					this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": "no" }).css({ "overflow": "hidden" });
+					this.WatchDog({ bStart: true });
+					break;
+				}
+				case "inline":
+				{
+					this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": "yes" }).css({ "overflow": "auto" });
+					this.SetSize();
+					this.iWDTimer = setTimeout(function () { oThis.WatchDog({ oInstance: oThis, bOnce: true }); }, oThis.oPlayer.oConfig.iWDCheckTime);
+					break;
+				}
+				case "resource":
+				case "library_material":
+				case "learning_task":
+				{
+					this.jFrame.attr({ "src": this.oPlayer.oCurrentItem.sItemURL, "scrolling": "yes" }).css({ "overflow": "auto" });
+					this.SetSize();
+					var iDelay = oThis.oPlayer.oConfig.iWDCheckTime;
+					if(this.oPlayer.oCurrentItem.sType=="learning_task")
+					{
+						iDelay = 2*iDelay;
+					}
+					this.iWDTimer = setTimeout(function () { oThis.WatchDog({ oInstance: oThis, bCheck: true }); }, iDelay);
+					break;
+				}
+			}
+		}
+		if(this.oPlayer.bLaunched)
+		{
+			this.oPlayer.jPanelMask.hide();
+		}
+		return this;
+	};
+	CPFrame.prototype.SetSize = function (oArgs)
+	{
+		var nAvailW, nAvailH, nRatioX, nRatioY, nRatio, nNewW, nNewH;
+		var bAdjust = false;
+		if(this.oPlayer.sPlayerType=="cp")
+		{
+			nAvailW = this.oPlayer.nW;
+			nAvailH = this.oPlayer.nWorkareaH;
+			$(".cp-course-title").html(1);
+			if(oArgs==null) // whole area
+			{
+				this.jFrame.attr({ "scrolling": "yes" }).css({ "overflow": "auto" }).width(nAvailW).height(nAvailH);
+				this.jContainer.css({ "left": "0", "top": "0", "-webkit-transform-origin": "0 0", "-webkit-transform": "scale(1)", "transform-origin": "0 0", "transform": "scale(1)" }).width(nAvailW).height(nAvailH);
+			}
+			else
+			{
+				if(oArgs.nW!=null && oArgs.nH!=null)
+				{
+					this.jFrame.attr({ "scrolling": (this.oPlayer.oCourseConfig.bAllowScroll ? "yes": "no") }).css({ "overflow": (this.oPlayer.oCourseConfig.bAllowScroll ? "auto": "hidden") }).width(oArgs.nW).height(oArgs.nH);
+					bAdjust = (oArgs.bAdjust==true);
+					if((oArgs.nW > nAvailW) || (oArgs.nH > nAvailH))
+					{
+						bAdjust = true;
+					}
+					if(bAdjust)
+					{
+						nRatioX = oArgs.nW/nAvailW;
+						nRatioY = oArgs.nH/nAvailH;
+						nRatio = Math.max(nRatioX, nRatioY);
+						nNewW = oArgs.nW/nRatio;
+						nNewH = oArgs.nH/nRatio;
+						this.jContainer.css({ "left": 0.5*(nAvailW - nNewW) + "px", "top": 0.5*(nAvailH - nNewH) + "px", "-webkit-transform-origin": "0 0", "-webkit-transform": "scale(" + (1/nRatio) + ")", "transform-origin": "0 0", "transform": "scale(" + (1/nRatio) + ")" }).width(oArgs.nW).height(oArgs.nH);
+					}
+					else
+					{
+						this.jContainer.css({ "left": 0.5*(nAvailW - oArgs.nW) + "px", "top": 0.5*(nAvailH - oArgs.H) + "px", "-webkit-transform-origin": "0 0", "-webkit-transform": "scale(1)", "transform-origin": "0 0", "transform": "scale(1)" }).width(oArgs.nW).height(oArgs.nH);
+					}
+				}
+			}
+		}
+		else if(this.oPlayer.sPlayerType=="cpx")
+		{
+			nAvailW = this.jContainer.width();
+			nAvailH = this.jContainer.height();
+			if(this.oPlayer.bMobile && (nAvailW>nAvailH))
+			{
+				nAvailW = $(window).width();
+			}
+			if(oArgs==null) // whole area
+			{
+				this.jFrame.attr({ "scrolling": "yes" }).css({ "left": 0, "top": 0, "overflow": "auto" }).width(nAvailW).height(nAvailH);
+				this.jWrapper.css({ "left": "0", "top": "0", "-webkit-transform-origin": "0 0", "-webkit-transform": "scale(1)", "transform-origin": "0 0", "transform": "scale(1)" }).width(nAvailW).height(nAvailH);
+			}
+			else
+			{
+				if(oArgs.nW!=null && oArgs.nH!=null)
+				{
+					this.jFrame.attr({ "scrolling": (this.oPlayer.oCourseConfig.bAllowScroll ? "yes": "no") }).css({ "overflow": (this.oPlayer.oCourseConfig.bAllowScroll ? "auto": "hidden") }).width(oArgs.nW).height(oArgs.nH);
+					bAdjust = (oArgs.bAdjust==true);
+					if((oArgs.nW > nAvailW) || (oArgs.nH > nAvailH))
+					{
+						bAdjust = true;
+					}
+					if(bAdjust)
+					{
+						this.jWrapper.css({"-webkit-transform": "scale(1)", "transform-origin": "0 0", "transform": "scale(1)"});
+						nRatioX = oArgs.nW/nAvailW;
+						nRatioY = oArgs.nH/nAvailH;
+						var bLandscape = window.matchMedia("(orientation: landscape)").matches;
+						if(bLandscape)
+						{
+							nRatioX = 1.1*nRatioX;
+							nRatioY = 1.1*nRatioY;
+						}
+						nRatio = Math.max(nRatioX, nRatioY);
+						nNewW = oArgs.nW/nRatio;
+						nNewH = oArgs.nH/nRatio;
+						var nTop = bLandscape ? 0.18*(nAvailH - nNewH): 0.5*(nAvailH - nNewH);
+						this.jWrapper.attr({ "style": "width:" + oArgs.nW + "px;height:" + oArgs.nH + "px;" }).width(oArgs.nW).height(oArgs.nH).css({ "left": (0.5*(nAvailW - nNewW)) + "px", "top": nTop + "px", "-webkit-transform-origin": "0 0", "-webkit-transform": "scaleY(" + (1/nRatio) + ")", "transform-origin": "0 0", "transform": "scale(" + (1/nRatio) + ")" });
+					}
+					else
+					{
+						this.jWrapper.css({ "left": (0.5*(nAvailW - oArgs.nW)) + "px", "top": 0.5*(nAvailH - oArgs.H) + "px", "-webkit-transform-origin": "0 0", "-webkit-transform": "scale(1)", "transform-origin": "0 0", "transform": "scale(1)" }).width(oArgs.nW).height(oArgs.nH);
+					}
+				}
+			}
+		}
+		return this;
+	};
+	CPFrame.prototype.WatchDog = function (oArgs)
+	{
+		var oThis = this;
+		if(!(this instanceof CPFrame))
+		{
+			oThis = oArgs.oInstance;
+		}
+		clearTimeout(oThis.iWDTimer);
+		if(oArgs!=null)
+		{
+			if(oArgs.bOnce==true)
+			{
+				oThis.oPlayer.UpdateInfo({ bProceed: false });
+			}
+			if(oArgs.bStart==true)
+			{
+				oThis.iWDTimer = setTimeout(function () { oThis.WatchDog({ oInstance: oThis, bCheck: true }); }, oThis.oPlayer.oConfig.iWDCheckTime);
+			}
+			if(oArgs.bCheck==true)
+			{
+				oThis.oPlayer.UpdateInfo({ bProceed: false });
+				if(!oThis.oPlayer.oCurrentItem._IsCompleted())
+				{
+					oThis.iWDTimer = setTimeout(function () { oThis.WatchDog({ oInstance: oThis, bCheck: true }); }, oThis.oPlayer.oConfig.iWDCheckTime);
+				}
+			}
+		}
+		return this;
+	};
+	CPFrame.prototype.Zoom = function (oArgs)
+	{
+		var oThis = this;
+		var nW, nH;
+		if(this.oPlayer.oCurrentItem!=null)
+		{
+			switch(this.oPlayer.oCurrentItem.sType)
+			{
+				case "lesson":
+				{
+					nW = (this.oPlayer.oCurrentItem.nWinW==null || this.oPlayer.oCurrentItem.nWinW==0) ? this.jContainer.width() : this.oPlayer.oCurrentItem.nWinW;
+					nH = (this.oPlayer.oCurrentItem.nWinH==null || this.oPlayer.oCurrentItem.nWinH==0) ? this.jContainer.height() : this.oPlayer.oCurrentItem.nWinH;
+					this.SetSize({ nW: nW, nH: nH, bAdjust: true });
+					break;
+				}
+				case "cl_module":
+				{
+					nW = this.oPlayer.bMobile ? this.jContainer.width() : ((this.oPlayer.oCurrentItem.nWinW==null || this.oPlayer.oCurrentItem.nWinW==0) ? 1280 : this.oPlayer.oCurrentItem.nWinW);
+					nH = this.oPlayer.bMobile ? this.jContainer.height() : ((this.oPlayer.oCurrentItem.nWinH==null || this.oPlayer.oCurrentItem.nWinH==0) ? 800 : this.oPlayer.oCurrentItem.nWinH);
+					this.SetSize({ nW: nW, nH: nH, bAdjust: true });
+					break;
+				}
+				default:
+				{
+					this.SetSize();
+					break;
+				}
+			}
+		}
+		return this;
+	};
+}
+{ // CPItem
+	window.CPItem = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.sId = oArgs.sId;
+		this.jxPart = oArgs.jxPart;
+		this.iUnloadTimer = 0;
+		this.Constructor();
+		return this;
+	};
+	CPItem.prototype._IsCompleted = function (oArgs)
+	{
+		var bCompleted = parseInt(this.sStateId, 10) > 1;
+		return bCompleted;
+	};
+	CPItem.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		this.bHasParent = (this.jxPart.children("parent_part_code").length!=0);
+		if(this.bHasParent)
+		{
+			this.sParentCode = this.jxPart.children("parent_part_code").text();
+		}
+		this.sType = this.jxPart.children("type").text();
+		this.sCode = this.jxPart.children("code").text();
+		this.sTitle = this.jxPart.children("name").text();
+		if(this.sTitle.length>30)
+		{
+			this.sTitle = TOOLS._Hyphenate({ sText: this.sTitle });
+		}
+		this.bDamaged = (this.jxPart.children("damaged").length!=0);
+		if(this.bDamaged)
+		{
+			this.bDamaged = TOOLS.Refine({ sValue: this.jxPart.children("damaged").text(), sType: "bool" });
+		}
+		if(this.bDamaged)
+		{
+			this.bLaunchable = false;
+			this.bRate = false;
+			this.sIconURL = "/cplayer/" + Math.ceil(12*Math.random()) + ".jpg";
+			this.iRating = 0;
+			this.iLearningTime = 0;
+			this.aTags = [];
+			this.sDesc = "";
+			this.sLastUsageDate = "";
+		}
+		else
+		{
+			if(this.jxPart.children("allow_rating").length==0)
+			{
+				this.bRate = false;
+			}
+			else
+			{
+				this.bRate = TOOLS.Refine({ sType: "bool", sValue: this.jxPart.children("allow_rating").text() });
+			}
+			if(this.jxPart.children("icon_url").length==0)
+			{
+				this.sIconURL = "/cplayer/" + Math.ceil(12*Math.random()) + ".jpg";
+			}
+			else
+			{
+				this.sIconURL = this.jxPart.children("icon_url").text();
+			}
+			if(this.jxPart.children("rating").length==0)
+			{
+				this.iRating = 0;
+			}
+			else
+			{
+				this.iRating = parseFloat(this.jxPart.children("rating").text());
+				if(isNaN(this.iRating))
+				{
+					this.iRating = 0;
+				}
+				else
+				{
+					this.iRating = Math.round(this.iRating);
+				}
+			}
+			if(this.jxPart.children("acquaint_time").length==0)
+			{
+				this.iLearningTime = 0;
+			}
+			else
+			{
+				this.iLearningTime = parseInt(this.jxPart.children("acquaint_time").text(),10);
+				if(isNaN(this.iLearningTime))
+				{
+					this.iLearningTime = 0;
+				}
+			}
+			this.aTags = [];
+			if(this.jxPart.children("tags").length!=0)
+			{
+				this.jxPart.find("tags > tag").each(function () { oThis.aTags.push({ sId: $(this).children("tag_id").text(), sName: $(this).children("tag_name").text() }); });
+			}
+			if(this.jxPart.children("desc").length==0)
+			{
+				this.sDesc = "";
+			}
+			else
+			{
+				this.sDesc = this.jxPart.children("desc").text();
+			}
+			if(this.jxPart.children("last_usage_date").length==0)
+			{
+				this.sLastUsageDate = "";
+			}
+			else
+			{
+				this.sLastUsageDate = this.jxPart.children("last_usage_date").text();
+			}
+			switch(this.sType)
+			{
+				case "folder":
+				{
+					break;
+				}
+				case "activity":
+				case "lesson":
+				case "inline":
+				case "test":
+				case "resource":
+				case "library_material":
+				case "learning_task":
+				case "cl_module":
+				{
+					var sPrevStatus = this.sDynamicStatus;
+					this.sDynamicStatus = (this.jxPart.children("dynamic_status").length==0 ? "" : this.jxPart.children("dynamic_status").text());
+					this.bStatusChanged = (this.sDynamicStatus!=sPrevStatus);
+					this.bAllowRating = (this.jxPart.children("allow_rating").length!=0);
+					if(this.bAllowRating)
+					{
+						this.bAllowRating = TOOLS.Refine({ sType: "bool", sValue: this.jxPart.children("allow_rating").text() });
+					}
+					this.sStateId = this.jxPart.children("state_id").text();
+					this.nScore = +this.jxPart.children("score").text();
+					this.sImportType = "";
+					var jxImportType = this.jxPart.children("import_type");
+					if(jxImportType.length!=0)
+					{
+						this.sImportType = jxImportType.text();
+					}
+					this.jxMaxScore = this.jxPart.children("max_score");
+					if(this.jxMaxScore.length==0)
+					{
+						if(this.sType=="lesson" || this.sType=="cl_module")
+						{
+							this.jxScoreStr = this.jxPart.children("score_str");
+							if(this.jxScoreStr.length==0)
+							{
+								var sStr = this.jxScoreStr.text();
+								var aStr = sStr.split(",");
+								if(aStr.length<2)
+								{
+									this.nMaxScore = 0;
+								}
+								else
+								{
+									this.nMaxScore = parseFloat(aStr[1]);
+									if(isNaN(this.nMaxScore))
+									{
+										this.nMaxScore = 0;
+									}
+								}
+							}
+							else
+							{
+								this.nMaxScore = null;
+							}
+						}
+						else
+						{
+							this.nMaxScore = 0;
+						}
+					}
+					else
+					{
+						this.nMaxScore = +this.jxPart.children("max_score").text();
+						if(isNaN(this.nMaxScore))
+						{
+							this.nMaxScore = 0;
+						}
+					}
+					this.bLaunchable = TOOLS.Refine({ sValue: this.jxPart.children("launchable").text(), sType: "bool" });
+					this.bResizable = TOOLS.Refine({ sValue: this.jxPart.children("resizable").text(), sType: "bool" });
+					this.nWinW = +this.jxPart.children("win_width").text();
+					this.nWinH = +this.jxPart.children("win_height").text();
+					if(isNaN(this.nWinW) || this.nWinW==0 || isNaN(this.nWinH) || this.nWinH==0)
+					{
+						if(this.oPlayer.oCourseConfig.iCourseW!=0 && this.oPlayer.oCourseConfig.iCourseH!=0)
+						{
+							this.nWinW = this.oPlayer.oCourseConfig.iCourseW;
+							this.nWinH = this.oPlayer.oCourseConfig.iCourseH;
+						}
+						this.bResizable = true;
+					}
+					break;
+				}
+			}
+			if(this.oPlayer.oCourseConfig.bAllowChecks)
+			{
+				if(this.jxPart.find("checks").length!=0)
+				{
+					var jChecks = this.jxPart.find("checks").children();
+					if(jChecks.length>0)
+					{
+						this.aChecks = [];
+						jChecks.each(function ()
+						{
+							var oCheck = { type: this.nodeName.toLowerCase() };
+							var jConditions = $(this).children("check");
+							var aConditions = [];
+							for(var i=0; i<jConditions.length; i++)
+							{
+								aConditions.push({ type: $(jConditions[i]).children("type").text(), cond: $(jConditions[i]).children("cond").text(), version: $(jConditions[i]).children("version").text(), msg: $(jConditions[i]).children("msg").text() });
+							}
+							oCheck.conditions = aConditions;
+							oThis.aChecks.push(oCheck);
+						});
+					}
+				}
+			}
+		}
+		return this;
+	};
+	CPItem.prototype.Launch = function (oArgs)
+	{
+		var oThis = this;
+		var aConditions;
+		if(this.oPlayer.oCurrentItem!=null)
+		{
+			this.oPlayer.oFrame.Unload({ fn: function () { oThis.Launch(oArgs); } });
+			return this;
+		}
+		if(this.oPlayer.oCourseConfig.bAllowChecks && this.aChecks!=null)
+		{
+			if(this.aChecks.length>0)
+			{
+				var sMsg = "";
+				var bAllChecks = true;
+				var bBrowser = false;
+				var bPlugin = false;
+				var oSymbols = { "gt": ">", "gte": ">=", "eq": "==", "lt": "<", "lte": "<=" };
+				for(var i=0; i<this.aChecks.length; i++)
+				{
+					switch(this.aChecks[i].type)
+					{
+						case "browser":
+						{
+							aConditions = this.aChecks[i].conditions;
+							switch(Browser.sType)
+							{
+								case "msie":
+								case "chrome":
+								case "firefox":
+								case "opera":
+								case "safari":
+								{
+									break;
+								}
+								default:
+								{
+									bAllChecks = false;
+									sMsg += this.oPlayer._GetString({ sId: "browser-unknown" }) + "\n";
+									return false;
+								}
+							}
+							$(aConditions).each(function ()
+							{
+								var sType = this.type;
+								if(sType!=Browser.sType)
+								{
+									return false;
+								}
+								var sCond = this.cond;
+								var iVer = +this.version;
+								var sTmp;
+								switch(sCond)
+								{
+									case "gt":
+									{
+										bBrowser = (Browser.iVersion > iVer);
+										break;
+									}
+									case "gte":
+									{
+										bBrowser = (Browser.iVersion >= iVer);
+										break;
+									}
+									case "eq":
+									{
+										bBrowser = (Browser.iVersion == iVer);
+										break;
+									}
+									case "lt":
+									{
+										bBrowser = (Browser.iVersion < iVer);
+										break;
+									}
+									case "lte":
+									{
+										bBrowser = (Browser.iVersion <= iVer);
+										break;
+									}
+								}
+								if(!bBrowser)
+								{
+									sTmp = $.trim(this.msg);
+									if(sTmp=="")
+									{
+										sTmp = oThis.oPlayer._GetString({ sId: "check-browser-not-met" }) + " [" + sType + " " + " " + oSymbols[sCond] + " " + iVer + "].";
+									}
+									sMsg += sTmp + "\n";
+								}
+								return true;
+							});
+							break;
+						}
+						case "plugin":
+						{
+							aConditions = this.aChecks[i].conditions;
+							var oVersion = null;
+							bPlugin = false;
+							$(aConditions).each(function ()
+							{
+								switch(this.type)
+								{
+									case "flash":
+									{
+										oVersion = Check.Flash();
+										break;
+									}
+									case "silverlight":
+									{
+										oVersion = Check.Silverlight();
+										break;
+									}
+								}
+								if(oVersion==null)
+								{
+									sTmp = $.trim(this.msg);
+									if(sTmp=="")
+									{
+										sTmp = oThis.oPlayer._GetString({ sId: "check-plugin-absent" }) + " [" + this.type + "].";
+									}
+									sMsg += sTmp + "\n";
+									return false;
+								}
+								var sCond = this.cond;
+								var iVer = +this.version;
+								switch(sCond)
+								{
+									case "gt":
+									{
+										bPlugin = (oVersion.major > iVer);
+										break;
+									}
+									case "gte":
+									{
+										bPlugin = (oVersion.major >= iVer);
+										break;
+									}
+									case "eq":
+									{
+										bPlugin = (oVersion.major == iVer);
+										break;
+									}
+									case "lt":
+									{
+										bPlugin = (oVersion.major < iVer);
+										break;
+									}
+									case "lte":
+									{
+										bPlugin = (oVersion.major <= iVer);
+										break;
+									}
+								}
+								if(!bPlugin)
+								{
+									sTmp = $.trim(this.msg);
+									if(sTmp=="")
+									{
+										sTmp = oThis.oPlayer._GetString({ sId: "check-plugin-not-met" }) + " [" + sType + " " + " " + oSymbols[sCond] + " " + iVer + "].";
+									}
+									sMsg += sTmp + "\n";
+								}
+								return true;
+							});
+							break;
+						}
+					}
+				}
+				if(sMsg!="")
+				{
+					if(this.oPlayer.oCourseConfig.sAfterChecks=="break")
+					{
+						alert(this.oPlayer._GetString({ sId: "after-checks-break" }) + "\n" + sMsg);
+						return false;
+					}
+					if(this.oPlayer.oCourseConfig.sAfterChecks=="alert")
+					{
+						if(!confirm(this.oPlayer._GetString({ sId: "after-checks-continue" }) + "\n" + sMsg))
+						{
+							return false;
+						}
+					}
+				}
+			}
+		}
+		var sURL = this.oPlayer.oConfig.sCLaunchURL + "?command=wt_create_session&part_code=" + this.sCode + "&session_id=" + this.oPlayer.oConfig.sSessionId + "&launch_id=" + this.oPlayer.oConfig.sLaunchId + "&player=v3";
+		if(this.oPlayer.oCourseConfig.bDynamic)
+		{
+			if(this.sDynamicStatus=="archive" && (this.sStateId=="0" || this.sStateId=="1"))
+			{
+				this.oPlayer.Skip({ oItem: this, bRevert: true, fn: function () { oThis.Launch(); } });
+				return this;
+			}
+		}
+		var nFW = this.oPlayer.jFrameContainer.width();
+		var nFH = this.oPlayer.jFrameContainer.height();
+		this.oPlayer.oFrame.jWrapper.width(nFW).height(nFH);
+		this.oPlayer.oFrame.jFrame.width(nFW).height(nFH).css({ "visibility": "visible" });
+		if(this.sType!="activity" && this.sType!="folder")
+		{
+			if(this.sType=="inline" || this.sType=="resource" || this.sType=="library_material" || this.sType=="learning_task")
+			{
+				this.sItemURL = sURL;
+				// Adjust IFrame size here
+				this.oPlayer.oCurrentItem = this;
+				this.oPlayer.oConfig.sPartCode = this.sCode;
+				this.oPlayer.oCourseConfig.sLastModuleCode = this.sCode;
+				this.oPlayer.oFrame.SetContent();
+				this.oPlayer.SetTitle({ sTarget: "module", sText: this.sTitle });
+				setTimeout(function () { oThis.oPlayer.UpdateInfo({ bProceed: false }); }, 1000);
+				var jSwitch = oThis.oPlayer.oMenu["contents"].jMenu.find("[wt-role='switch']");
+				if(this.oPlayer.oConfig.bAutoHideTree && jSwitch.length!=0)
+				{
+					if(jSwitch.is(":visible"))
+					{
+						oThis.oPlayer.oMenu["contents"].Close({ oElem: jSwitch[0] });
+					}
+				}
+				if(!this.oPlayer.bLaunched)
+				{
+					this.oPlayer.bLaunched = true;
+				}
+			}
+			else
+			{
+				$.ajax(
+				{
+					type: "GET",
+					url: sURL + "&rnd=" + Math.random(),
+					dataType: "xml",
+					context: this,
+					success: function (xmlResponse)
+					{
+						// "this" context moved to parent
+						var oDoc = xmlResponse;
+						if(typeof oDoc != "object")
+						{
+							alert(oThis.oPlayer._GetString({ sId: "malformed-create" }));
+							return false;
+						}
+						oThis.oPlayer.sModuleSessionId = $(oDoc).find("data > session_id").text();
+						if(oThis.oPlayer.sModuleSessionId=="")
+						{
+							alert(oThis.oPlayer._GetString({ sId: "error-no-id" }));
+							return false;
+						}
+						oThis.sItemURL = decodeURIComponent($(oDoc).find("data > launch_url").text());
+						if(oThis.oPlayer.bMobile && oThis.sType=="cl_module")
+						{
+							if(oThis.sItemURL.indexOf("courselab3/")!=-1 && oThis.sItemURL.indexOf("module_id=")!=-1)
+							{
+								//oThis.sItemURL = oThis.sItemURL.split("start.html").join("start2.html");
+								oThis.nWinW = oThis.oPlayer.oFrame.jFrame.width();
+								oThis.nWinH = oThis.oPlayer.oFrame.jFrame.height();
+								oThis.sItemURL += "&mw=" + oThis.nWinW + "&mh=" + oThis.nWinH;
+							}
+						}
+						oThis.oPlayer.oCurrentItem = oThis;
+						oThis.oPlayer.oConfig.sPartCode = oThis.sCode;
+						oThis.oPlayer.oCourseConfig.sLastModuleCode = oThis.sCode;
+						oThis.oPlayer.oFrame.SetContent();
+						// Adjust IFrame here
+						oThis.oPlayer.SetTitle({ sTarget: "module", sText: oThis.sTitle });
+						oThis.oPlayer.UpdateInfo({ bProceed: false });
+						var jSwitch = oThis.oPlayer.oMenu["contents"].jMenu.find("[wt-role='switch']");
+						if(oThis.oPlayer.oConfig.bAutoHideTree && jSwitch.length!=0)
+						{
+							if(jSwitch.is(":visible"))
+							{
+								oThis.oPlayer.oMenu["contents"].Close({ oElem: jSwitch[0] });
+							}
+						}
+						if(!oThis.oPlayer.bLaunched)
+						{
+							oThis.oPlayer.bLaunched = true;
+						}
+						return true;
+					},
+					complete: function (jqXHR, sStatus)
+					{
+						if(sStatus!="success")
+						{
+							alert(oThis.oPlayer._GetString({ sId: "error-create-call" }) + " " + sStatus);
+						}
+						return true;
+					},
+					failure: function ()
+					{
+						alert(oThis.oPlayer._GetString({ sId: "create-failure" }));
+						return true;
+					}
+				});
+			}
+		}
+		return this;
+	};
+	CPItem.prototype.Reveal = function (oArgs)
+	{
+		var oThis = this;
+		if(this.oPlayer.oCurrentItem!=null)
+		{
+			if(this.oPlayer.oCourseConfig.bDynamic)
+			{
+				if(this.sDynamicStatus=="archive" && (this.sStateId=="0" || this.sStateId=="1"))
+				{
+					this.oPlayer.Skip({ oItem: this, bRevert: true });
+					return this;
+				}
+			}
+			var nFCW = this.oPlayer.jFrameContainer.width();
+			var nFCH = this.oPlayer.jFrameContainer.height();
+			var nFWW = this.oPlayer.oFrame.jWrapper.width();
+			var nFWH = this.oPlayer.oFrame.jWrapper.height();
+			this.oPlayer.oFrame.jWrapper.width(nFWW).height(nFWH);
+			this.oPlayer.oFrame.jFrame.width(nFWW).height(nFWH).css({ "visibility": "visible" });
+		}
+		return this;
+	};
+	CPItem.prototype.Update = function (oArgs)
+	{
+		if(oArgs.jxPart!=null)
+		{
+			this.jxPart = oArgs.jxPart;
+			var oThis = this;
+			this.bDamaged = (this.jxPart.children("damaged").length!=0);
+			if(this.bDamaged)
+			{
+				this.bDamaged = TOOLS.Refine({ sValue: this.jxPart.children("damaged").text(), sType: "bool" });
+			}
+			if(this.bDamaged)
+			{
+				this.bLaunchable = false;
+				this.bRate = false;
+				this.sIconURL = "/cplayer/" + Math.ceil(12*Math.random()) + ".jpg";
+				this.iRating = 0;
+				this.iLearningTime = 0;
+				this.aTags = [];
+				this.sDesc = "";
+				this.sLastUsageDate = "";
+			}
+			else
+			{
+				switch(this.sType)
+				{
+					case "folder":
+					{
+						this.sTitle = this.jxPart.children("name").text();
+						break;
+					}
+					case "activity":
+					case "lesson":
+					case "inline":
+					case "test":
+					case "resource":
+					case "library_material":
+					case "learning_task":
+					case "cl_module":
+					{
+						this.sTitle = this.jxPart.children("name").text();
+						this.sStateId = this.jxPart.children("state_id").text();
+						if(this.jxPart.children("last_usage_date").length==0)
+						{
+							this.sLastUsageDate = "";
+						}
+						else
+						{
+							this.sLastUsageDate = this.jxPart.children("last_usage_date").text();
+						}
+						var sPrevStatus = this.sDynamicStatus;
+						this.sDynamicStatus = (this.jxPart.children("dynamic_status").length==0 ? "" : this.jxPart.children("dynamic_status").text());
+						this.bStatusChanged = (this.sDynamicStatus!=sPrevStatus);
+						this.bAllowRating = (this.jxPart.children("allow_rating").length!=0);
+						if(this.bAllowRating)
+						{
+							this.bAllowRating = TOOLS.Refine({ sType: "bool", sValue: this.jxPart.children("allow_rating").text() });
+						}
+						this.nScore = +this.jxPart.children("score").text();
+						this.bLaunchable = TOOLS.Refine({ sValue: this.jxPart.children("launchable").text(), sType: "bool" });
+						this.bResizable = TOOLS.Refine({ sValue: this.jxPart.children("resizable").text(), sType: "bool" });
+						this.nWinW = +this.jxPart.children("win_width").text();
+						this.nWinH = +this.jxPart.children("win_height").text();
+						if(this.nWinW==0 && this.nWinH==0)
+						{
+							if(this.oPlayer.oCourseConfig.iCourseW!=0 && this.oPlayer.oCourseConfig.iCourseH!=0)
+							{
+								this.nWinW = this.oPlayer.oCourseConfig.iCourseW;
+								this.nWinH = this.oPlayer.oCourseConfig.iCourseH;
+							}
+							this.bResizable = true;
+						}
+						break;
+					}
+				}
+				if(this.oPlayer.oCourseConfig.bAllowChecks)
+				{
+					if(this.jxPart.find("checks").length!=0)
+					{
+						var jChecks = this.jxPart.find("checks").children();
+						if(jChecks.length>0)
+						{
+							this.aChecks = [];
+							jChecks.each(function ()
+							{
+								var oCheck = { type: this.nodeName.toLowerCase() };
+								var jConditions = $(this).children("check");
+								var aConditions = [];
+								for(var i=0; i<jConditions.length; i++)
+								{
+									aConditions.push({ type: $(jConditions[i]).children("type").text(), cond: $(jConditions[i]).children("cond").text(), version: $(jConditions[i]).children("version").text(), msg: $(jConditions[i]).children("msg").text() });
+								}
+								oCheck.conditions = aConditions;
+								oThis.aChecks.push(oCheck);
+							});
+						}
+					}
+				}
+			}
+		}
+		return this;
+	};
+	CPItem.prototype.UIEvent = function (oArgs)
+	{
+		var oThis = this;
+		switch(oArgs.oEvt.type)
+		{
+			case "click":
+			{
+				if(oArgs.oEvt.timestamp!=null) // event is not fake
+				{
+					oArgs.oEvt.preventDefault();
+					oArgs.oEvt.stopPropagation();
+					oArgs.oEvt.stopImmediatePropagation();
+				}
+				if(this.oPlayer.oCurrentItem!=null)
+				{
+					if(this.oPlayer.oCurrentItem.sId!=this.sId)
+					{
+						this.Launch();
+					}
+					else
+					{
+						this.Reveal();
+					}
+				}
+				else
+				{
+					this.Launch();
+				}
+				if(this.oPlayer.oCourseConfig.bDynamic)
+				{
+					this.oPlayer.oMenu["contents"].oBtns["tab-modules"].jBtn.click();
+				}
+				if(this.oPlayer.jContainer.find("[wt-role='panel-btn']").is(":visible"))
+				{
+					this.oPlayer.oMenu["contents"].Close({ oElem: this.oPlayer.jContainer.find("[wt-role='panel-btn']")[0] });
+				}
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPMenu
+	window.CPMenu = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jMenu = oArgs.jMenu;
+		this.sSide = oArgs.sSide;
+		this.nTop = oArgs.nTop;
+		this.nWidth = oArgs.nWidth;
+		this.nHeight = oArgs.nHeight;
+		this.sType = oArgs.sType;
+		this.oBtns = {};
+		this.bOpen = false;
+		this.Constructor();
+		return this;
+	};
+	CPMenu.prototype.Constructor = function (oArgs)
+	{
+		this.jMenu.css({ "top": this.nTop + "px", "width": this.nWidth + "px", "height": this.nHeight + "px" });
+		this.sXClose = this.oPlayer.nW + "px";
+		if(this.sSide=="left")
+		{
+			this.sXClose = "-" + this.sXClose;
+		}
+		this.jMenu.css({ "left": this.sXClose, "visibility": "visible" });
+		this.jContainer = this.jMenu.find("[wt-elem='menu-container']");
+		this.jHeader = this.jMenu.find("[wt-elem='menu-header']");
+		this.jBody = this.jMenu.find("[wt-elem='menu-body']");
+		this.jFooter = this.jMenu.find("[wt-elem='menu-footer']");
+		switch(this.sType)
+		{
+			case "contents":
+			{
+				this.oPlayer.jStorage.find("[wt-elem='contents-header']").clone(true).appendTo(this.jHeader);
+				this.oPlayer.jStorage.find("[wt-elem='contents-body']").clone(true).appendTo(this.jBody);
+				this.oPlayer.jStorage.find("[wt-elem='contents-footer']").clone(true).appendTo(this.jFooter);
+				this.jCourseTitle = this.jHeader.find("[wt-elem='contents-main-title']");
+				this.jBody.find("[wt-elem='user-title']").html(this.oPlayer._GetString({ sId: "str-user" }));
+				this.jBody.find("[wt-elem='appointed-title']").html(this.oPlayer._GetString({ sId: "str-appointed" }));
+				this.jBody.find("[wt-elem='due-title']").html(this.oPlayer._GetString({ sId: "str-due" }));
+				this.jBody.find("[wt-elem='status-title']").html(this.oPlayer._GetString({ sId: "str-status" }));
+				this.jBody.find("[wt-elem='total-title']").html(this.oPlayer._GetString({ sId: "str-score-total" }));
+				this.jUserName = this.jBody.find("[wt-elem='user-value']");
+				this.jAppointed = this.jBody.find("[wt-elem='appointed-value']");
+				this.jDue = this.jBody.find("[wt-elem='due-value']");
+				this.jStatus = this.jBody.find("[wt-elem='status-value']");
+				this.jTotal = this.jBody.find("[wt-elem='total-value']");
+				this.jTree = this.jBody.find("[wt-elem='contents-tree']");
+				this.jPartsList = this.jBody.find("[wt-elem='contents-list']");
+
+				this.jMaterialHeader = this.jBody.find("[wt-elem='material-header']");
+				this.jMaterialTree = this.jBody.find("[wt-elem='material-tree']");
+				this.jMaterialList = this.jBody.find("[wt-elem='material-list']");
+				this.jMaterialEmpty = this.jBody.find("[wt-elem='material-empty']").hide();
+				this.jMaterialTemplate = this.oPlayer.jStorage.find("[wt-elem='item-material']");
+
+				this.oBtns["finish"] = new CPButton({ oPlayer: this.oPlayer, oTarget: this, oElem: this.jContainer.find("[wt-elem='btn-finish']")[0], fn: oThis.UIEvent, oArgs: { sAction: "finish" } });
+				this.oBtns["comments"] = new CPButton({ oPlayer: this.oPlayer, oTarget: this, oElem: this.jContainer.find("[wt-elem='btn-comments']")[0], sAction: "comments" });
+				break;
+			}
+			case "comment":
+			{
+				this.oPlayer.jStorage.find("[wt-elem='comment-header']").clone(true).appendTo(this.jHeader);
+				this.oPlayer.jStorage.find("[wt-elem='comment-body']").clone(true).appendTo(this.jBody);
+				this.oPlayer.jStorage.find("[wt-elem='comment-footer']").clone(true).appendTo(this.jFooter);
+				this.jCourseTitle = this.jHeader.find("[wt-elem='contents-main-title']");
+				this.jTree = this.jBody.find("[wt-elem='comment-tree']");
+				this.jCommentList = this.jBody.find("[wt-elem='comment-list']");
+				this.jCommentFld = this.jBody.find("[wt-elem='comment-editor']");
+				this.oBtns["comment"] = new CPButton({ oPlayer: this.oPlayer, oTarget: this, oElem: this.jContainer.find("[wt-elem='btn-comment']")[0], sAction: "comment" });
+				break;
+			}
+		}
+		this.oBtns["close"] = new CPButton({ oPlayer: this.oPlayer, oTarget: this, oElem: this.jMenu.find("[wt-elem='btn-close']")[0], sAction: "close" });
+		return this;
+	};
+	CPMenu.prototype.AppendItem = function (oArgs)
+	{
+		var oThis = this;
+		var sItemId = oArgs.sId;
+		this.oPlayer.oItems[sItemId].oListElem = { jElem: this.oPlayer.jStorage.find("[wt-elem='item-" + this.oPlayer.oItems[sItemId].sType + "']").clone(true).attr({ "wt-id": sItemId }).appendTo(oArgs.jParent) };
+		this.oPlayer.oItems[sItemId].oListElem.jTitle = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-elem='item-title']");
+		this.oPlayer.oItems[sItemId].oListElem.jTitle.html(this.oPlayer.oItems[sItemId].sTitle);
+		switch(this.oPlayer.oItems[sItemId].sType)
+		{
+			case "folder":
+			{
+				break;
+			}
+			case "activity":
+			case "lesson":
+			case "inline":
+			case "test":
+			case "resource":
+			case "library_material":
+			case "learning_task":
+			case "cl_module":
+			{
+				var sStatus = this.oPlayer.oStatus[this.oPlayer.oItems[sItemId].sStateId]; //0
+				this.oPlayer.oItems[sItemId].oListElem.jStatus = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-elem='item-status']");
+				this.oPlayer.oItems[sItemId].oListElem.jScore = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-elem='item-score']");
+				this.oPlayer.oItems[sItemId].oListElem.jStatus.attr({ "wt-status": sStatus  });
+				this.oPlayer.oItems[sItemId].oListElem.jScore.html(sStatus!="n" && this.oPlayer.oItems[sItemId].nScore=="" ? "0" : this.oPlayer._FormatNumber({ nValue: this.oPlayer.oItems[sItemId].nScore }) );
+				if(this.oPlayer.oItems[sItemId].bLaunchable)
+				{
+					this.oPlayer.oItems[sItemId].oListElem.jElem.attr({ "wt-launchable": "1" }).on("click", function (e) { oThis.oPlayer.oItems[this.getAttribute("wt-id")].UIEvent.call(oThis.oPlayer.oItems[this.getAttribute("wt-id")], { oElem: this, oEvt: e }); });
+				}
+				break;
+			}
+		}
+		if(this.oPlayer.oItems[sItemId].aChildIds!=null)
+		{
+			var iLevel = oArgs.iLevel + 1;
+			var jParent = this.oPlayer.jStorage.find("[wt-elem='list-level']").clone(true).attr({ "wt-level": iLevel }).appendTo(this.oPlayer.oItems[sItemId].oListElem);
+			for(var i=0; i<this.oPlayer.oItems[sItemId].aChildIds.length; i++)
+			{
+				this.AppendItem({ sId: this.oPlayer.oItems[sItemId].aChildIds[i].sId, iLevel: iLevel, jParent: jParent });
+			}
+		}
+		return this;
+	};
+	CPMenu.prototype.AppendMaterial = function (oArgs)
+	{
+		var jElem = this.jMaterialTemplate.clone(true).appendTo(this.jMaterialList);
+		if(oArgs.bCourse==true)
+		{
+			jElem.attr({ "wt-target": "COURSE" });
+		}
+		else
+		{
+			jElem.attr({ "wt-target": oArgs.sPartId });
+		}
+		var sId = (oArgs.jxNode.children("id").length>0) ? oArgs.jxNode.children("id").text() : "";
+		var sType = (oArgs.jxNode.children("type").length>0) ? oArgs.jxNode.children("type").text() : "";
+		var sCatalog = (oArgs.jxNode.children("catalog").length>0) ? oArgs.jxNode.children("catalog").text() : "";
+		var sIconURL = (oArgs.jxNode.children("icon_url").length>0) ? oArgs.jxNode.children("icon_url").text() : "";
+		var sURL = (oArgs.jxNode.children("link").length>0) ? oArgs.jxNode.children("link").text() : "";
+		var sName = (oArgs.jxNode.children("name").length>0) ? oArgs.jxNode.children("name").text() : "";
+		var sDesc = (oArgs.jxNode.children("desc").length>0) ? oArgs.jxNode.children("desc").text() : "";
+		if(sIconURL!="")
+		{
+			if(sIconURL.toLowerCase().indexOf(".ico")!=-1)
+			{
+				sIconURL = "/icons/32png" + sIconURL.substring(sIconURL.lastIndexOf("/"), sIconURL.toLowerCase().indexOf(".ico")) + ".png";
+			}
+		}
+		jElem.attr({ "wt-id": sId, "wt-type": sType, "wt-catalog": sCatalog, "title": sDesc });
+		jElem.find("[wt-role='material-link']").attr({ "href": sURL, "target": "_blank" }).html(sName);
+		jElem.find("[wt-role='material-icon']").css({ "background-image": sIconURL });
+		return this;
+	};
+	CPMenu.prototype.Adjust = function (oArgs)
+	{
+		var nAvailW, nAvailH, nHeaderH, nBodyH, nFooterH, nTreeH, nDiff;
+		switch(this.sType)
+		{
+			case "contents":
+			{
+				nAvailW = this.jContainer.width();
+				this.jCourseTitle.width(nAvailW - this.jHeader.find("[wt-elem='header-right']").width());
+				nAvailH = this.jContainer.height();
+				nHeaderH = this.jHeader.outerHeight();
+				nBodyH = this.jBody.outerHeight();
+				nFooterH = this.jFooter.outerHeight();
+				nTreeH = this.jTree.height();
+				nDiff = nAvailH - nHeaderH - nBodyH - nFooterH;
+				this.jTree.height(nTreeH + nDiff);
+				if(this.bHasMaterials)
+				{
+					this.jMaterialTree.height(this.jBody.height() - this.jMaterialHeader.outerHeight());
+				}
+				break;
+			}
+			case "comment":
+			{
+				nAvailW = this.jContainer.width();
+				this.jCourseTitle.width(nAvailW - this.jHeader.find("[wt-elem='header-right']").width());
+				nAvailH = this.jContainer.height();
+				nHeaderH = this.jHeader.outerHeight();
+				nBodyH = this.jBody.outerHeight();
+				nFooterH = this.jFooter.outerHeight();
+				nTreeH = this.jTree.outerHeight(true) - this.jTree.height();
+				nDiff = nAvailH - nHeaderH - nFooterH - nTreeH;
+				this.jTree.height(nDiff);
+				break;
+			}
+		}
+		return this;
+	};
+	CPMenu.prototype.Create = function (oArgs)
+	{
+		var i;
+		var sKey;
+		switch(this.sType)
+		{
+			case "contents":
+			{
+				this.jCourseTitle.html(this.oPlayer.oCourseConfig.sCourseName);
+				this.jUserName.html(this.oPlayer.oCourseConfig.sUserName);
+				this.jAppointed.html(this.oPlayer.oCourseConfig.sDateAppointed);
+				this.jDue.html(this.oPlayer.oCourseConfig.sDateDue);
+				this.jStatus.html(g_oCPStrings["status_" + this.oPlayer.oCourseConfig.sStatus]);
+				this.jTotal.html(this.oPlayer.oCourseConfig.sTotal);
+				this.jPartsList.attr({ "wt-level": "0" }).html("");
+				for(sKey in this.oPlayer.oItems)
+				{
+					if(this.oPlayer.oItems[sKey].aChildIds==null)
+					{
+						this.AppendItem({ sId: sKey, iLevel: 0, jParent: this.jPartsList });
+					}
+				}
+				this.bHasMaterials = false;
+				if(this.oPlayer.jxMaterials.length!=0)
+				{
+					for(i=0; i<this.oPlayer.jxMaterials.length; i++)
+					{
+						this.AppendMaterial({ jxNode: $(this.oPlayer.jxMaterials[i]), bCourse: true });
+						this.bHasMaterials = true;
+					}
+				}
+				var jxMat;
+				for(sKey in this.oPlayer.oItems)
+				{
+					if(this.oPlayer.oItems.hasOwnProperty(sKey))
+					{
+						jxMat = this.oPlayer.oItems[sKey].jxPart.find("materials > material");
+						if(jxMat.length!=0)
+						{
+							for(i=0; i<jxMat.length; i++)
+							{
+								this.AppendMaterial({ jxNode: $(jxMat[i]), bCourse: false, sPartId: sKey });
+								this.bHasMaterials = true;
+							}
+						}
+					}
+				}
+				if(!this.bHasMaterials)
+				{
+					this.jMaterialEmpty.show();
+					this.jMaterialTree.hide();
+				}
+				break;
+			}
+			case "comment":
+			{
+				break;
+			}
+		}
+		this.Adjust();
+		return this;
+	};
+	CPMenu.prototype.Disable = function (oArgs)
+	{
+		for(var sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems.hasOwnProperty(sKey))
+			{
+				this.oPlayer.oItems[sKey].oListElem.jElem.prop("disabled", true).off();
+			}
+		}
+		return this;
+	};
+	CPMenu.prototype.Open = function (oArgs)
+	{
+		if(!this.bOpen)
+		{
+			var oThis = this;
+			this.Update();
+			this.oPlayer.Mask({ bOn: true, bLoader: false });
+			this.jMenu.animate({ "left": "0" }, 400, function () { oThis.bOpen = true; });
+		}
+		return this;
+	};
+	CPMenu.prototype.Close = function (oArgs)
+	{
+		if(this.bOpen)
+		{
+			var oThis = this;
+			this.jMenu.animate({ "left": this.sXClose }, 400, function () { oThis.bOpen = false; if(oArgs==null) { oThis.oPlayer.Mask(); } });
+		}
+		return this;
+	};
+	CPMenu.prototype.Update = function (oArgs)
+	{
+		var oThis = this;
+		var i;
+		switch(this.sType)
+		{
+			case "contents":
+			{
+				this.jStatus.html(g_oCPStrings["status_" + this.oPlayer.oCourseConfig.sStatus]);
+				for(var sKey in this.oPlayer.oItems)
+				{
+					if(this.oPlayer.oItems[sKey].sType!="folder" && this.oPlayer.oItems[sKey].sType!="activity")
+					{
+						var sStatus = this.oPlayer.oStatus[this.oPlayer.oItems[sKey].sStateId]; //0
+						this.oPlayer.oItems[sKey].oListElem.jStatus.attr({ "wt-status": sStatus  });
+						this.oPlayer.oItems[sKey].oListElem.jScore.html(sStatus!="n" && this.oPlayer.oItems[sKey].nScore=="" ? "0" : this.oPlayer._FormatNumber({ nValue: this.oPlayer.oItems[sKey].nScore }) );
+						if(this.oPlayer.oItems[sKey].bLaunchable && this.oPlayer.oItems[sKey].oListElem.jElem.attr("wt-launchable")!="1")
+						{
+							this.oPlayer.oItems[sKey].oListElem.jElem.attr({ "wt-launchable": "1" }).on("click", function (e) { oThis.oPlayer.oItems[this.getAttribute("wt-id")].UIEvent.call(oThis.oPlayer.oItems[this.getAttribute("wt-id")], { oElem: this, oEvt: e }); });
+						}
+						if(this.oPlayer.oItems[sKey].sCode==this.oPlayer.oConfig.sPartCode)
+						{
+							this.oPlayer.oItems[sKey].oListElem.jElem.attr({ "wt-current": "1" });
+						}
+						else
+						{
+							this.oPlayer.oItems[sKey].oListElem.jElem.removeAttr("wt-current");
+						}
+					}
+				}
+				if(this.bHasMaterials)
+				{
+					this.jMaterialList.find("[wt-elem='item-material']").each(function ()
+					{
+						var sTarget = this.getAttribute("wt-target");
+						if(sTarget=="COURSE" || sTarget==this.oPlayer.oCurrentItem.sId)
+						{
+							$(this).show();
+						}
+						else
+						{
+							$(this).hide();
+						}
+					});
+				}
+				if(this.oBtns["comments"]!=null)
+				{
+					var iCount = 0;
+					if(cmi!=null)
+					{
+						if(cmi.comments_from_learner!=null)
+						{
+							if($.isArray(cmi.comments_from_learner))
+							{
+								if(cmi.location!=null)
+								{
+									if(cmi.comments_from_learner.length!=0)
+									{
+										for(i=0; i<cmi.comments_from_learner.length; i++)
+										{
+											if(cmi.comments_from_learner[i].location==cmi.location)
+											{
+												iCount++;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					this.oBtns["comments"].jBtn.find("[wt-elem='comments-count']").html(iCount);
+				}
+				break;
+			}
+			case "comment":
+			{
+				this.jCommentList.html("");
+				if(cmi!=null)
+				{
+					if(cmi.comments_from_learner!=null)
+					{
+						if($.isArray(cmi.comments_from_learner))
+						{
+							if(cmi.location!=null)
+							{
+								if(cmi.comments_from_learner.length!=0)
+								{
+									var sHTML;
+									var dDate;
+									for(i=0; i<cmi.comments_from_learner.length; i++)
+									{
+										if(cmi.comments_from_learner[i].location==cmi.location)
+										{
+											dDate = new Date(Date.parse(cmi.comments_from_learner[i].timestamp));
+											sHTML = '<span class="cp-comment-timestamp">[';
+											sHTML += dDate.toLocaleString();
+											sHTML += ']</span> ' + cmi.comments_from_learner[i].comment;
+											$(document.createElement("li")).html(sHTML).appendTo(this.jCommentList);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				break;
+			}
+		}
+		return this;
+	};
+	CPMenu.prototype.SubmitComment = function (oArgs)
+	{
+		var sText = this.jCommentFld.val();
+		if(sText!="")
+		{
+			try
+			{
+				API.Comment({ sComment: sText });
+				this.jCommentFld.val("");
+			}
+			catch(e)
+			{}
+		}
+		this.Update();
+		return true;
+	};
+	CPMenu.prototype.UIEvent = function (oArgs)
+	{
+		switch(oArgs.sAction)
+		{
+			case "finish":
+			{
+				this.oPlayer.Complete();
+				break;
+			}
+			case "close":
+			{
+				this.Close();
+				break;
+			}
+			case "comments":
+			{
+				this.Close({ bMask: true });
+				this.oPlayer.oMenu["comment"].Open();
+				break;
+			}
+			case "comment":
+			{
+				this.SubmitComment();
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CPProgress
+	window.CPProgress = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jContainer = oArgs.jContainer;
+		this.jRail = this.jContainer.find("[wt-elem='progress-rail']");
+		this.ojItems = {};
+		this.Constructor();
+		return this;
+	};
+	CPProgress.prototype.Constructor = function (oArgs)
+	{
+		var jTemplate = this.oPlayer.jStorage.find("[wt-elem='progress-item']");
+		for(var sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems[sKey].sType!="folder" && this.oPlayer.oItems[sKey].sType!="activity")
+			{
+				this.ojItems[sKey] = jTemplate.clone(true).attr({ "wt-status": this.oPlayer.oStatus[this.oPlayer.oItems[sKey].sStateId] }).appendTo(this.jRail);
+			}
+		}
+		return this;
+	};
+	CPProgress.prototype.Update = function (oArgs)
+	{
+		for(var sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems.sType!="folder")
+			{
+				this.ojItems[sKey].attr({ "wt-status": this.oPlayer.oStatus[this.oPlayer.oItems[sKey].sStateId] });
+			}
+		}
+		return this;
+	};
+}
+{ // CPButton
+	window.CPButton = function (oArgs)
+	{
+		var oThis = this;
+		this.oPlayer = oArgs.oPlayer;
+		this.oTarget = oArgs.oTarget;
+		this.oItem = oArgs.oItem;
+		this.sAction = oArgs.sAction;
+		this.iFreezeTimer = 0;
+		if(oArgs.oElem==null)
+		{
+			this.oContainer = oArgs.oContainer;
+			this.oBtn = document.createElement("button");
+			this.jBtn = $(this.oBtn).appendTo(this.oContainer);
+		}
+		else
+		{
+			this.oBtn = oArgs.oElem;
+			this.jBtn = $(this.oBtn);
+			this.oContainer = this.jBtn.parent();
+		}
+		this.jBtn.attr({ "wt-action": this.sAction }).on("mouseover mouseout click", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e }); });
+		if(!this.jBtn.hasClass("cp-btn-" + this.sAction))
+		{
+			this.jBtn.addClass("cp-btn-" + this.sAction);
+		}
+		this.bDisabled = false;
+		return this;
+	};
+	CPButton.prototype.UIEvent = function (oArgs)
+	{
+		if(this.bDisabled)
+		{
+			return false;
+		}
+		switch(oArgs.oEvt.type)
+		{
+			case "swipeleft":
+			case "swiperight":
+			{
+				this.oPlayer.Navigate({ sTarget: this.sAction });
+				break;
+			}
+			case "click":
+			{
+				this.oTarget.UIEvent({ sAction: oArgs.oElem.getAttribute("wt-action") });
+				oArgs.oEvt.preventDefault();
+				oArgs.oEvt.stopPropagation();
+				break;
+			}
+		}
+		return this;
+	};
+	CPButton.prototype.Disable = function (oArgs)
+	{
+		this.jBtn.prop("disabled", true);
+		this.bDisabled = true;
+		return this;
+	};
+	CPButton.prototype.Enable = function (oArgs)
+	{
+		this.jBtn.prop("disabled", false);
+		this.bDisabled = false;
+		return this;
+	};
+	CPButton.prototype.Show = function (oArgs)
+	{
+		this.jBtn.fadeIn("fast");
+		return this;
+	};
+	CPButton.prototype.Hide = function (oArgs)
+	{
+		this.jBtn.hide();
+		return this;
+	};
+	CPButton.prototype.SetText = function (oArgs)
+	{
+		this.jBtn.find("[wt-elem='btn-text']").html(oArgs.sText);
+		return this;
+	};
+	CPButton.prototype.Freeze = function (oArgs)
+	{
+		var oThis = this;
+		if(!this.bDisabled)
+		{
+			this.jBtn.prop("disabled", true);
+		}
+		this.iFreezeTimer = setTimeout(function () { oThis.Unfreeze(); }, oArgs.iDelay);
+		return this;
+	};
+	CPButton.prototype.Unfreeze = function (oArgs)
+	{
+		clearTimeout(this.iFreezeTimer);
+		if(!this.bDisabled)
+		{
+			this.jBtn.prop("disabled", false);
+		}
+		return this;
+	};
+}
+{ // CPSimpleMenu
+	window.CPSimpleMenu = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.jMenu = oArgs.jMenu;
+		this.sType = oArgs.sType;
+		this.oItems = {};
+		this.oMaterials  ={};
+		this.oBtns = {};
+		this.bOpen = false;
+		this.Constructor();
+		return this;
+	};
+	CPSimpleMenu.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		if(this.oPlayer.bMobileX)
+		{
+			this.jMenu.find("[wt-role='close-player']").hide();
+		}
+		this.jMenu.find("[wt-btn]").each(function ()
+		{
+			var sId = this.getAttribute("wt-role");
+			oThis.oBtns[sId] = new CXBtn({ oPlayer: oThis.oPlayer, sId: sId, jContainer: oThis.jMenu, jBtn: $(this), fn: oThis.UIEvent, oArgs: { oThis: oThis } });
+		});
+		this.jCourseTitle = this.jMenu.find("[wt-role='course-title']");
+		this.jUserName = this.jMenu.find("[wt-role='user-name']");
+		this.jAssignedDate = this.jMenu.find("[wt-role='date-assigned']");
+		this.jDueDate = this.jMenu.find("[wt-role='date-due']");
+		this.jStatusContainer = this.jMenu.find("[wt-role='status-container']");
+		this.jStatus = this.jMenu.find("[wt-role='course-status']");
+		this.jProgressIndicator = this.jMenu.find("[wt-role='progress-indicator']");
+		this.jProgressBody = this.jMenu.find("[wt-role='progress-body']");
+		this.jProgressWrapper = this.jMenu.find("[wt-role='progress-wrapper']");
+		this.jProgressPie = this.jMenu.find("[wt-role='progress-pie']");
+		this.jProgressPieLeft = this.jMenu.find("[wt-role='progress-pie-left']");
+		this.jProgressPieRight = this.jMenu.find("[wt-role='progress-pie-right']");
+		this.jProgressPieShadow = this.jMenu.find("[wt-role='progress-pie-shadow']");
+		this.jProgressValue = this.jMenu.find("[wt-role='progress-value']");
+
+		this.jScoreIndicator = this.jMenu.find("[wt-role='score-indicator']");
+		this.jScoreBody = this.jMenu.find("[wt-role='score-body']");
+		this.jScoreWrapper = this.jMenu.find("[wt-role='score-wrapper']");
+		this.jScorePie = this.jMenu.find("[wt-role='score-pie']");
+		this.jScorePieLeft = this.jMenu.find("[wt-role='score-pie-left']");
+		this.jScorePieRight = this.jMenu.find("[wt-role='score-pie-right']");
+		this.jScorePieShadow = this.jMenu.find("[wt-role='score-pie-shadow']");
+		this.jScoreValue = this.jMenu.find("[wt-role='score-value']");
+		this.jScoreMaxValue = this.jMenu.find("[wt-role='score-max-value']");
+
+		this.jScoreInnerBody = this.jScoreIndicator.find("[wt-role='score-inner-body']");
+		this.jScoreInnerWrapper = this.jScoreIndicator.find("[wt-role='score-inner-wrapper']");
+		this.jScoreInnerPie = this.jScoreIndicator.find("[wt-role='score-inner-pie']");
+		this.jScoreInnerPieLeft = this.jScoreIndicator.find("[wt-role='score-inner-pie-left']");
+		this.jScoreInnerPieRight = this.jScoreIndicator.find("[wt-role='score-inner-pie-right']");
+		this.jScoreInnerPieShadow = this.jScoreIndicator.find("[wt-role='score-inner-pie-shadow']");
+		this.jContentTabs = this.jMenu.find("[wt-role='content-tabs']");
+		this.jModulesBlock = this.jMenu.find("[wt-role='modules-block']");
+		this.jPartsList = this.jModulesBlock.find("[wt-role='list-modules']");
+		this.jArchiveBlock = this.jMenu.find("[wt-role='archive-block']");
+		this.jArchiveList = this.jArchiveBlock.find("[wt-role='list-modules']");
+		this.jMaterialsBlock = this.jMenu.find("[wt-role='materials-block']");
+		this.jMaterialList = this.jMenu.find("[wt-role='list-materials']");
+		this.jNoMaterials = this.jMenu.find("[wt-role='no-materials']");
+		this.jMaterialTemplate = this.oPlayer.jStorage.find("[wt-template='material-item']");
+		this.bOpen = true;
+		return this;
+	};
+	CPSimpleMenu.prototype.AppendFolder = function (oArgs)
+	{
+		var oThis = this;
+		var sItemId = oArgs.sId;
+		var oItem = this.oPlayer.oItems[sItemId];
+		this.oPlayer.oItems[sItemId].oListElem = { jElem: this.oPlayer.jStorage.find("[wt-template='folder-item']").clone(true).removeAttr("wt-template").appendTo(oArgs.jParent).attr({ "wt-id": sItemId, "wt-launchable": "0" }) };
+		this.oPlayer.oItems[sItemId].oListElem.jTitle = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-name']").html(this.oPlayer.oItems[sItemId].sTitle);
+		this.oPlayer.oItems[sItemId].oListElem.jList = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='item-list']");
+		this.oPlayer.oItems[sItemId].oListElem.jElem.attr({ "wt-launchable": "0" });
+		if(this.oPlayer.oItems[sItemId].aChildIds!=null)
+		{
+			var iLevel = oArgs.iLevel + 1;
+			for(var i=0; i<this.oPlayer.oItems[sItemId].aChildIds.length; i++)
+			{
+				if(this.oPlayer.oItems[this.oPlayer.oItems[sItemId].aChildIds[i]].sType=="folder")
+				{
+					this.AppendFolder({ sId: this.oPlayer.oItems[sItemId].aChildIds[i], iLevel: iLevel, jParent: this.oPlayer.oItems[sItemId].oListElem.jList });
+				}
+				else
+				{
+					this.AppendItem({ sId: this.oPlayer.oItems[sItemId].aChildIds[i], iLevel: iLevel, jParent: this.oPlayer.oItems[sItemId].oListElem.jList });
+				}
+			}
+		}
+		return this;
+	};
+	CPSimpleMenu.prototype.AppendItem = function (oArgs)
+	{
+		var oThis = this;
+		var sItemId = oArgs.sId;
+		var oItem = this.oPlayer.oItems[sItemId];
+		this.oPlayer.aSequence.push(sItemId);
+		this.oPlayer.oItems[sItemId].oListElem = { jElem: this.oPlayer.jStorage.find("[wt-template='module-item']").clone(true).appendTo(oArgs.jParent).attr({ "wt-id": sItemId }) };
+		this.oPlayer.oItems[sItemId].oListElem.jTitle = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-name']").html(this.oPlayer.oItems[sItemId].sTitle);
+		this.oPlayer.oItems[sItemId].oListElem.jStatus = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-status']");
+		this.oPlayer.oItems[sItemId].oListElem.jScore = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-score']");
+		this.oPlayer.oItems[sItemId].oListElem.jCompletionDate = this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='completion-date']");
+		switch(this.oPlayer.oItems[sItemId].sType)
+		{
+			case "folder":
+			{
+				this.oPlayer.oItems[sItemId].oListElem.jStatus.hide();
+				this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-score-block']").hide();
+				this.oPlayer.oItems[sItemId].oListElem.jElem.attr({ "wt-launchable": "0" });
+				break;
+			}
+			case "activity":
+			case "lesson":
+			case "inline":
+			case "test":
+			case "resource":
+			case "library_material":
+			case "learning_task":
+			case "cl_module":
+			{
+				if(this.oPlayer.oItems[sItemId].bDamaged)
+				{
+					this.oPlayer.oItems[sItemId].oListElem.jStatus.hide();
+					this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-score-block']").hide();
+					this.oPlayer.oItems[sItemId].oListElem.jElem.attr({ "wt-launchable": "0" });
+					this.oPlayer.oItems[sItemId].oListElem.jElem.find("[wt-role='module-damaged']").css({ "display": "flex" });
+				}
+				else
+				{
+					var sStatus = this.oPlayer.oStatus[this.oPlayer.oItems[sItemId].sStateId]; //0
+					this.oPlayer.oItems[sItemId].oListElem.jElem.attr({"wt-status": sStatus});
+					this.oPlayer.oItems[sItemId].oListElem.jScore.html(sStatus!="n" && this.oPlayer.oItems[sItemId].nScore=="" ? "0" : this.oPlayer._FormatNumber({ nValue: this.oPlayer.oItems[sItemId].nScore }) );
+					if(this.oPlayer.oItems[sItemId].bLaunchable && this.oPlayer.oItems[sItemId].sType!="activity")
+					{
+						this.oPlayer.oItems[sItemId].oListElem.jElem.attr({ "wt-launchable": "1" }).on("click", function (e) { oThis.oPlayer.oItems[this.getAttribute("wt-id")].UIEvent.call(oThis.oPlayer.oItems[this.getAttribute("wt-id")], { oElem: this, oEvt: e }); });
+					}
+					if(oArgs.bCompletionDate==true)
+					{
+						this.oPlayer.oItems[sItemId].oListElem.jCompletionDate.html(TOOLS.DateStringFromISO8601({ sISODate: this.oPlayer.oItems[sItemId].jxPart.find("last_usage_date").text() }));
+					}
+					else
+					{
+						this.oPlayer.oItems[sItemId].oListElem.jCompletionDate.hide();
+					}
+				}
+				break;
+			}
+		}
+		if(this.oPlayer.oItems[sItemId].aChildIds!=null)
+		{
+			var iLevel = oArgs.iLevel + 1;
+			var jParent = this.oPlayer.jStorage.find("[wt-elem='list-level']").clone(true).attr({ "wt-level": iLevel }).appendTo(this.oPlayer.oItems[sItemId].oListElem);
+			for(var i=0; i<this.oPlayer.oItems[sItemId].aChildIds.length; i++)
+			{
+				this.AppendItem({ sId: this.oPlayer.oItems[sItemId].aChildIds[i].sId, iLevel: iLevel, jParent: jParent });
+			}
+		}
+		return this;
+	};
+	CPSimpleMenu.prototype.AppendMaterial = function (oArgs)
+	{
+		var jElem = this.jMaterialTemplate.clone(true).removeAttr("wt-template").appendTo(this.jMaterialList);
+		if(oArgs.bCourse==true)
+		{
+			jElem.attr({ "wt-target": "COURSE" });
+		}
+		else
+		{
+			jElem.attr({ "wt-target": oArgs.sPartId });
+		}
+		var sId = (oArgs.jxNode.children("id").length>0) ? oArgs.jxNode.children("id").text() : "";
+		var sType = (oArgs.jxNode.children("type").length>0) ? oArgs.jxNode.children("type").text() : "";
+		var sCatalog = (oArgs.jxNode.children("catalog").length>0) ? oArgs.jxNode.children("catalog").text() : "";
+		var sIconURL = (oArgs.jxNode.children("icon_url").length>0) ? oArgs.jxNode.children("icon_url").text() : "";
+		var sURL = (oArgs.jxNode.children("link").length>0) ? oArgs.jxNode.children("link").text() : "";
+		var sName = (oArgs.jxNode.children("name").length>0) ? oArgs.jxNode.children("name").text() : "";
+		var sDesc = (oArgs.jxNode.children("desc").length>0) ? oArgs.jxNode.children("desc").text() : "";
+		if(sIconURL!="")
+		{
+			if(sIconURL.toLowerCase().indexOf(".ico")!=-1)
+			{
+				sIconURL = "/icons/32png" + sIconURL.substring(sIconURL.lastIndexOf("/"), sIconURL.toLowerCase().indexOf(".ico")) + ".png";
+			}
+		}
+		jElem.attr({ "wt-id": sId, "wt-type": sType, "wt-catalog": sCatalog, "title": sDesc });
+		jElem.find("[wt-role='material-link']").attr({ "href": sURL, "target": "_blank" }).html(sName);
+		jElem.find("[wt-role='material-icon']").css({ "background-image": "url(" + sIconURL + ")" });
+		this.jNoMaterials.hide();
+		return this;
+	};
+	CPSimpleMenu.prototype.Adjust = function (oArgs)
+	{
+		var nDiff, nTreeH, nFooterH, nBodyH, nHeaderH, nAvailH, nAvailW;
+		switch(this.sType)
+		{
+			case "contents":
+			{
+				nAvailW = this.jContainer.width();
+				this.jCourseTitle.width(nAvailW - this.jHeader.find("[wt-elem='header-right']").width());
+				nAvailH = this.jContainer.height();
+				nHeaderH = this.jHeader.outerHeight();
+				nBodyH = this.jBody.outerHeight();
+				nFooterH = this.jFooter.outerHeight();
+				nTreeH = this.jTree.height();
+				nDiff = nAvailH - nHeaderH - nBodyH - nFooterH;
+				this.jTree.height(nTreeH + nDiff);
+				if(this.bHasMaterials)
+				{
+					this.jMaterialTree.height(this.jBody.height() - this.jMaterialHeader.outerHeight());
+				}
+				break;
+			}
+			case "comment":
+			{
+				nAvailW = this.jContainer.width();
+				this.jCourseTitle.width(nAvailW - this.jHeader.find("[wt-elem='header-right']").width());
+				nAvailH = this.jContainer.height();
+				nHeaderH = this.jHeader.outerHeight();
+				nBodyH = this.jBody.outerHeight();
+				nFooterH = this.jFooter.outerHeight();
+				nTreeH = this.jTree.outerHeight(true) - this.jTree.height();
+				nDiff = nAvailH - nHeaderH - nFooterH - nTreeH;
+				this.jTree.height(nDiff);
+				break;
+			}
+		}
+		return this;
+	};
+	CPSimpleMenu.prototype.Create = function (oArgs)
+	{
+		switch(this.sType)
+		{
+			case "contents":
+			{
+				var i;
+				var sKey;
+				this.jCourseTitle.html(this.oPlayer.oCourseConfig.sCourseName);
+				this.jUserName.html(this.oPlayer.oCourseConfig.sUserName);
+				this.jAppointed.html(this.oPlayer.oCourseConfig.sDateAppointed);
+				this.jDue.html(this.oPlayer.oCourseConfig.sDateDue);
+				this.jStatus.attr({ "cp-status": this.oPlayer.oCourseConfig.sStatus }).html(g_oCPStrings["status_" + this.oPlayer.oCourseConfig.sStatus]);
+				this.jTotal.html(this.oPlayer.oCourseConfig.sTotal);
+				this.jPartsList.attr({ "wt-level": "0" }).html("");
+				for(sKey in this.oPlayer.oItems)
+				{
+					if(this.oPlayer.oItems[sKey].aChildIds==null)
+					{
+						this.AppendItem({ sId: sKey, iLevel: 0, jParent: this.jPartsList });
+					}
+				}
+				this.bHasMaterials = false;
+				if(this.oPlayer.jxMaterials.length!=0)
+				{
+					for(i=0; i<this.oPlayer.jxMaterials.length; i++)
+					{
+						this.AppendMaterial({ jxNode: $(this.oPlayer.jxMaterials[i]), bCourse: true });
+						this.bHasMaterials = true;
+					}
+				}
+				var jxMat;
+				for(sKey in this.oPlayer.oItems)
+				{
+					if(this.oPlayer.oItems.hasOwnProperty(sKey))
+					{
+						jxMat = this.oPlayer.oItems[sKey].jxPart.find("materials > material");
+						if(jxMat.length!=0)
+						{
+							for(i=0; i<jxMat.length; i++)
+							{
+								this.AppendMaterial({ jxNode: $(jxMat[i]), bCourse: false, sPartId: sKey });
+								this.bHasMaterials = true;
+							}
+						}
+					}
+				}
+				if(!this.bHasMaterials)
+				{
+					this.jMaterialEmpty.show();
+					this.jMaterialTree.hide();
+				}
+
+				break;
+			}
+			case "comment":
+			{
+				break;
+			}
+		}
+		this.Adjust();
+		return this;
+	};
+	CPSimpleMenu.prototype.Disable = function (oArgs)
+	{
+		for(var sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems.hasOwnProperty(sKey))
+			{
+				this.oPlayer.oItems[sKey].oListElem.jElem.prop("disabled", true).off();
+			}
+		}
+		this.jPartsList.find("[wt-launchable]").removeAttr("wt-launchable").attr({ "wt-off": "1" });
+		this.jPartsList.find("[wt-current]").removeAttr("wt-current");
+		return this;
+	};
+	CPSimpleMenu.prototype.Fill = function (oArgs)
+	{
+		var oThis = this;
+		var i;
+		var sKey;
+		this.jCourseTitle.html(this.oPlayer.oCourseConfig.sCourseName);
+		this.jUserName.html(this.oPlayer.oCourseConfig.sUserName);
+		this.jAssignedDate.html(this.oPlayer.oCourseConfig.sDateAppointed);
+		this.jDueDate.html(this.oPlayer.oCourseConfig.sDateDue);
+		this.jStatus.attr({ "cp-status": this.oPlayer.oCourseConfig.sStatus }).html(g_oCPStrings["status_" + this.oPlayer.oCourseConfig.sStatus]);
+		this.UpdateScore({ bInit: true, sTotal: this.oPlayer.oCourseConfig.sTotal, sMax: this.oPlayer.oCourseConfig.sMaxScore, sMastery: this.oPlayer.oCourseConfig.sMasteryScore });
+		// progress here
+		if(this.oPlayer.oCourseConfig.bDynamic)
+		{
+			this.jStatusContainer.hide();
+		}
+		this.jPartsList.attr({ "wt-level": "0" }).html("");
+		this.jArchiveList.attr({ "wt-level": "0" }).html("");
+		for(sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems[sKey].sType=="folder" && this.oPlayer.oItems[sKey].oListElem==null)
+			{
+				this.AppendFolder({ sId: sKey, iLevel: 0, jParent: this.jPartsList });
+			}
+			else if(this.oPlayer.oItems[sKey].sParentId==null)
+			{
+				this.AppendItem({ sId: sKey, iLevel: 0, jParent: this.jPartsList, bCompletionDate: true });
+			}
+		}
+
+		this.bHasMaterials = false;
+		if(this.oPlayer.jxMaterials.length!=0)
+		{
+			for(i=0; i<this.oPlayer.jxMaterials.length; i++)
+			{
+				this.AppendMaterial({ jxNode: $(this.oPlayer.jxMaterials[i]), bCourse: true });
+				this.bHasMaterials = true;
+			}
+		}
+		var jxMat;
+		for(sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems.hasOwnProperty(sKey))
+			{
+				jxMat = this.oPlayer.oItems[sKey].jxPart.find("materials > material");
+				if(jxMat.length!=0)
+				{
+					for(i=0; i<jxMat.length; i++)
+					{
+						this.AppendMaterial({ jxNode: $(jxMat[i]), bCourse: false, sPartId: sKey });
+						this.bHasMaterials = true;
+					}
+				}
+			}
+		}
+		if(!this.oPlayer.oCourseConfig.bDynamic)
+		{
+			this.oBtns["tab-archive"].Hide();
+			this.jArchiveBlock.hide();
+		}
+		if(!this.bHasMaterials)
+		{
+			this.oBtns["tab-materials"].Hide();
+			this.jMaterialsBlock.hide();
+		}
+		if(!this.bHasMaterials && !this.oPlayer.oCourseConfig.bDynamic)
+		{
+			this.jContentTabs.hide();
+		}
+		this.jCloseBtnContainer = this.jMenu.find("[wt-role='close-btn-container']").on("mouseover mouseout", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e }); });
+		if(this.bMobileX)
+		{
+			this.oBtns["close-player"].Hide();
+		}
+		else
+		{
+			this.oBtns["close-player"].jBtn.on("mouseover mouseout", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e }); });
+		}
+		this.oBtns["finish"].jBtn.on("mouseover mouseout", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e }); });
+		this.iCloseBtnTimer = 0;
+		return this;
+	};
+	CPSimpleMenu.prototype.Close = function (oArgs)
+	{
+		var oThis = this;
+		if(this.bOpen)
+		{
+			if(oArgs!=null)
+			{
+				if(oArgs.bInstant==true)
+				{
+					this.oPlayer.jPanelMask.hide();
+					if(this.jMenu.css("flex-direction")!="row")
+					{
+						this.jMenu.css({ "left": "0", "top": "100%" });
+					}
+					else
+					{
+						this.jMenu.css({ "top": "0", "left": "-100%"});
+					}
+					this.bOpen = false;
+					this.oPlayer.jContainer.find("[wt-role='panel-btn']").attr({ "wt-state": "closed" }).hide().delay(600).fadeIn();//.removeClass("cpx-no-transition-override");
+				}
+				else
+				{
+					this.oPlayer.jPanelMask.fadeOut(300);
+					if(this.jMenu.css("flex-direction")!="row")
+					{
+						this.jMenu.css({ "left": "0" }).animate({ "top": "100%" }, 300, function () { oThis.bOpen = false; });
+					}
+					else
+					{
+						this.jMenu.css({ "top": "0" }).animate({ "left": "-100%" }, 300, function () { oThis.bOpen = false; });
+					}
+					oArgs.oElem.setAttribute("wt-state", "closed");
+				}
+			}
+		}
+		return this;
+	};
+	CPSimpleMenu.prototype.Open = function (oArgs)
+	{
+		var oThis = this;
+		if(!this.bOpen)
+		{
+			this.oPlayer.jPanelMask.fadeIn(300);
+			if(this.jMenu.css("flex-direction")!="row")
+			{
+				this.jMenu.css({ "left": "0", "top": "100%" }).animate({ "top": "0" }, 300, function () { oThis.bOpen = true; });
+			}
+			else
+			{
+				this.jMenu.css({ "top": "0", "left": "-100%" }).animate({ "left": "0" }, 300, function () { oThis.bOpen = true; });
+			}
+			if(oArgs!=null)
+			{
+				if(oArgs.oElem!=null)
+				{
+					oArgs.oElem.setAttribute("wt-state", "open");
+				}
+			}
+		}
+	};
+	CPSimpleMenu.prototype.Update = function (oArgs)
+	{
+		var oThis = this;
+		if(this.oPlayer.oCourseConfig.sStatus=="c" && (this.oPlayer.oCourseConfig.sPreStatus=="p" || this.oPlayer.oCourseConfig.sPreStatus=="f"))
+		{
+			this.jStatus.attr({ "cp-status": this.oPlayer.oCourseConfig.sPreStatus }).html(g_oCPStrings["status_" + this.oPlayer.oCourseConfig.sPreStatus]);
+			if(oArgs!=null)
+			{
+				if(oArgs.bInit==true)
+				{
+					this.oPlayer.oFrame.SetContent({ sType: "completed" });
+				}
+			}
+		}
+		else
+		{
+			this.jStatus.attr({ "cp-status": this.oPlayer.oCourseConfig.sStatus }).html(g_oCPStrings["status_" + this.oPlayer.oCourseConfig.sStatus]);
+		}
+		var nProgress = 0;
+		var nScore = 0;
+		var iLength = 0;
+		var sKey;
+		for(sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems[sKey].sType!="folder")
+			{
+				iLength++;
+			}
+		}
+		var nStep = (iLength==0) ? 0 : 100/iLength;
+		for(sKey in this.oPlayer.oItems)
+		{
+			if(this.oPlayer.oItems.hasOwnProperty(sKey))
+			{
+				if(this.oPlayer.oItems[sKey].sType!="folder")
+				{
+					if(this.oPlayer.oCourseConfig.bDynamic)
+					{
+						if(this.oPlayer.oItems[sKey].oListElem==null)
+						{
+							this.AppendItem({ sId: sKey, iLevel: 0, jParent: this.jPartsList, bCompletionDate: true });
+						}
+					}
+					var sStatus = (this.oPlayer.oItems[sKey].sStateId!=null) ? this.oPlayer.oStatus[this.oPlayer.oItems[sKey].sStateId] : "n"; //0
+					if(sStatus!="n" && sStatus!="i")
+					{
+						nProgress += nStep;
+					}
+					this.oPlayer.oItems[sKey].oListElem.jElem.attr({ "wt-status": sStatus  });
+					if(this.oPlayer.oItems[sKey].sType!="activity")
+					{
+						if(this.oPlayer.oItems[sKey].nMaxScore==0)
+						{
+							this.oPlayer.oItems[sKey].oListElem.jElem.find("[wt-role='item-has-no-score']").show();
+							this.oPlayer.oItems[sKey].oListElem.jElem.find("[wt-role='item-has-score']").hide();
+						}
+						else
+						{
+							this.oPlayer.oItems[sKey].oListElem.jElem.find("[wt-role='item-has-no-score']").hide();
+							this.oPlayer.oItems[sKey].oListElem.jElem.find("[wt-role='item-has-score']").show();
+							this.oPlayer.oItems[sKey].oListElem.jScore.html( this.oPlayer._FormatNumber({ nValue: this.oPlayer.oItems[sKey].nScore }) );
+						}
+					}
+					else
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.find("[wt-role='item-has-no-score']").hide();
+						this.oPlayer.oItems[sKey].oListElem.jElem.find("[wt-role='item-has-score']").hide();
+					}
+					if(this.oPlayer.oItems[sKey].bLaunchable && this.oPlayer.oItems[sKey].oListElem.jElem.attr("wt-launchable")!="1")
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.attr({ "wt-launchable": "1" }).on("click", function (e) { oThis.oPlayer.oItems[this.getAttribute("wt-id")].UIEvent.call(oThis.oPlayer.oItems[this.getAttribute("wt-id")], { oElem: this, oEvt: e }); });
+					}
+					else if(!this.oPlayer.oItems[sKey].bLaunchable)
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.attr({ "wt-launchable": "0" }).off("click");
+					}
+					if(this.oPlayer.oItems[sKey].sCode==this.oPlayer.oConfig.sPartCode)
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.attr({ "wt-current": "1" });
+						if(this.oPlayer.oCourseConfig.bDynamic)
+						{
+							if(!this.oPlayer.oItems[sKey].bMsgShown)
+							{
+								if(this.oPlayer.jxSession.find("message").length!=0 && !this.oPlayer.bCourseMsgShown)
+								{
+									this.oPlayer.oMsgs["module_completed"].SetText({ sText: this.oPlayer.jxSession.find("message > text").text() });
+									this.oPlayer.oMsgs["module_completed"].oBtns["next"].Hide();
+									this.oPlayer.oMsgs["module_completed"].oBtns["incomplete"].Hide();
+									if(this.oPlayer.oCourseConfig.bDynamic)
+									{
+										this.oPlayer.oMsgs["module_completed"].SetRating({ bRating: this.oPlayer.oItems[sKey].bAllowRating });
+									}
+									this.oPlayer.oMsgs["module_completed"].Show();
+									this.oPlayer.oItems[sKey].bMsgShown = true;
+									this.oPlayer.bCourseMsgShown = true;
+								}
+								else
+								{
+									if(this.oPlayer.oItems[sKey].sDynamicStatus=="archive" && this.oPlayer.oItems[sKey].bStatusChanged)
+									{
+										this.oPlayer.oMsgs["module_completed"].SetText({ sText: this.oPlayer._GetString({ sId: "module-msg-text" }) });
+										this.oPlayer.oMsgs["module_completed"].oBtns["next"].Show();
+										this.oPlayer.oMsgs["module_completed"].oBtns["incomplete"].Hide();
+										if(this.oPlayer.oCourseConfig.bDynamic)
+										{
+											this.oPlayer.oMsgs["module_completed"].SetRating({ bRating: this.oPlayer.oItems[sKey].bAllowRating });
+										}
+										this.oPlayer.oMsgs["module_completed"].Show();
+										this.oPlayer.oItems[sKey].bMsgShown = true;
+										this.oPlayer.oItems[sKey].bStatusChanged = false;
+									}
+								}
+							}
+						}
+						else
+						{
+							if(this.oPlayer.oCourseConfig.sStatus=="i" && this.oPlayer.bAllLoaded && this.oPlayer.oConfig.bEnableCourseMsg && (sStatus=="c" || sStatus=="p" || sStatus=="f") && this.oPlayer.oItems[sKey].bMsgShown!=true && this.oPlayer._HasIncompleteModules())
+							{
+								if(this.oPlayer.oItems[sKey].bLast)
+								{
+									this.oPlayer.oMsgs["module_completed"].SetText({ sText: this.oPlayer._GetString({ sId: "last-module-msg-text" }) });
+									this.oPlayer.oMsgs["module_completed"].oBtns["next"].Hide();
+									this.oPlayer.oMsgs["module_completed"].oBtns["incomplete"].Show();
+								}
+								else if(!this.oPlayer._NextModuleAllowed({ sCode: this.oPlayer.oCurrentItem.sCode }))
+								{
+									this.oPlayer.oMsgs["module_completed"].SetText({ sText: this.oPlayer._GetString({ sId: "module-msg-text-next-forbidden" }) });
+									this.oPlayer.oMsgs["module_completed"].oBtns["next"].Hide();
+									this.oPlayer.oMsgs["module_completed"].oBtns["incomplete"].Hide();
+								}
+								else
+								{
+									this.oPlayer.oMsgs["module_completed"].SetText({ sText: this.oPlayer._GetString({ sId: "module-msg-text" }) });
+									this.oPlayer.oMsgs["module_completed"].oBtns["next"].Show();
+									this.oPlayer.oMsgs["module_completed"].oBtns["incomplete"].Hide();
+								}
+								if(this.oPlayer.oCourseConfig.bDynamic)
+								{
+									this.oPlayer.oMsgs["module_completed"].SetRating({ bRating: this.oPlayer.oItems[sKey].bAllowRating });
+								}
+								this.oPlayer.oMsgs["module_completed"].Show();
+								this.oPlayer.oItems[sKey].bMsgShown = true;
+							}
+						}
+					}
+					else
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.removeAttr("wt-current");
+					}
+				}
+				if(this.oPlayer.oCourseConfig.bDynamic)
+				{
+					if((this.oPlayer.oItems[sKey].sDynamicStatus=="archive") && (this.oPlayer.oItems[sKey]!=this.oPlayer.oCurrentItem) && (this.oPlayer.oItems[sKey].oListElem.jElem.parent()[0]==this.jPartsList[0]))
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.appendTo(this.jArchiveList);
+					}
+					else if(this.oPlayer.oItems[sKey]==this.oPlayer.oCurrentItem)
+					{
+						this.oPlayer.oItems[sKey].oListElem.jElem.prependTo(this.jPartsList);
+					}
+					this.oBtns["tab-archive"].jBtn.find("[wt-role='archive-counter']").html(this.jArchiveList.children().length);
+				//	this.oPlayer.oCover.oBtns["btn-archive"].jBtn.find("[wt-role='archive-counter']").html(this.jArchiveList.children().length);
+				}
+			}
+		}
+		if(this.bHasMaterials)
+		{
+			var bVisible = false;
+			this.jMaterialList.find("[wt-role='material-item']").each(function ()
+			{
+				var sTarget = this.getAttribute("wt-target");
+				if(sTarget=="COURSE" || sTarget==this.oPlayer.oCurrentItem.sId)
+				{
+					$(this).show();
+					bVisible = true;
+				}
+				else
+				{
+					$(this).hide();
+				}
+			});
+			if(bVisible)
+			{
+				this.jNoMaterials.hide();
+			}
+			else
+			{
+				this.jNoMaterials.show();
+			}
+			this.jMaterialsBlock.hide();
+		}
+		this.jProgressValue.html(Math.floor(nProgress) + "%");
+		this.UpdateProgress({ nPercent: nProgress });
+		this.UpdateScore({ bInit: true, sTotal: this.oPlayer.oCourseConfig.sTotal, sMax: this.oPlayer.oCourseConfig.sMaxScore, sMastery: this.oPlayer.oCourseConfig.sMasteryScore });
+		return this;
+	};
+	CPSimpleMenu.prototype.UpdateProgress = function (oArgs)
+	{
+		var sDonutWidth = "0.2em";
+		var nPercent = Math.round(oArgs.nPercent);
+		if(nPercent > 100)
+		{
+			nPercent = 100;
+		}
+		else if (nPercent < 0)
+		{
+			nPercent = 0;
+		}
+		var nDeg = Math.round(360 * (nPercent / 100));
+		if (nPercent > 50)
+		{
+			this.jProgressPie.css('clip', 'rect(auto, auto, auto, auto)');
+			this.jProgressPieRight.css('transform', 'rotate(180deg)');
+		}
+		else
+		{
+			this.jProgressPie.css('clip', 'rect(0, 1em, 1em, 0.5em)');
+			this.jProgressPieRight.css('transform', 'rotate(0deg)');
+		}
+		if (oArgs.bDonut!=false)
+		{
+			this.jProgressPieRight.css('border-width', sDonutWidth);
+			this.jProgressPieLeft.css('border-width', sDonutWidth);
+			this.jProgressPieShadow.css('border-width', sDonutWidth);
+		}
+		else
+		{
+			this.jProgressPieRight.css('border-width', '0.5em');
+			this.jProgressPieLeft.css('border-width', '0.5em');
+			this.jProgressPieShadow.css('border-width', '0.5em');
+		}
+		//$(oElem + ' .num').text(nPercent);
+		this.jProgressPieLeft.css('transform', 'rotate(' + nDeg + 'deg)');
+		return this;
+	};
+	CPSimpleMenu.prototype.UpdateScore = function (oArgs)
+	{
+		var sDonutWidth = "0.2em";
+		var nScore = parseFloat(oArgs.sTotal);
+		if(isNaN(nScore))
+		{
+			nScore = 0;
+		}
+		var nMaxScore = parseFloat(oArgs.sMax);
+		if(isNaN(nMaxScore))
+		{
+			nMaxScore = 0;
+		}
+		var nMasteryScore = 0;
+		if(oArgs.bInit==true)
+		{
+			this.jScoreInnerBody.hide();
+			nMasteryScore = parseFloat(oArgs.sMastery);
+			if(isNaN(nMasteryScore))
+			{
+				nMasteryScore = 0;
+			}
+			if(nMaxScore!=0 && nMasteryScore!=0)
+			{
+				if(nMasteryScore<=nMaxScore)
+				{
+					this.jScoreInnerBody.show();
+					var nMasteryPercent = Math.round(100*nMasteryScore/nMaxScore);
+					if(nMasteryPercent > 100)
+					{
+						nMasteryPercent = 100;
+					}
+					else if (nMasteryPercent < 0)
+					{
+						nMasteryPercent = 0;
+					}
+					var nMasteryDeg = Math.round(360 * (nMasteryPercent / 100));
+					if (nMasteryPercent > 50)
+					{
+						this.jScoreInnerPie.css('clip', 'rect(auto, auto, auto, auto)');
+						this.jScoreInnerPieRight.css('transform', 'rotate(180deg)');
+					}
+					else
+					{
+						this.jScoreInnerPie.css('clip', 'rect(0, 1em, 1em, 0.5em)');
+						this.jScoreInnerPieRight.css('transform', 'rotate(0deg)');
+					}
+					if (oArgs.bDonut!=false)
+					{
+						this.jScoreInnerPieRight.css('border-width', sDonutWidth);
+						this.jScoreInnerPieLeft.css('border-width', sDonutWidth);
+						this.jScoreInnerPieShadow.css('border-width', sDonutWidth);
+					}
+					else
+					{
+						this.jScoreInnerPieRight.css('border-width', '0.5em');
+						this.jScoreInnerPieLeft.css('border-width', '0.5em');
+						this.jScoreInnerPieShadow.css('border-width', '0.5em');
+					}
+					this.jScoreInnerPieLeft.css('transform', 'rotate(' + nMasteryDeg + 'deg)');
+				}
+			}
+		}
+		if(nMaxScore!=0)
+		{
+			this.jScoreMaxValue.html(nMaxScore);
+			var nPercent = Math.round(100*nScore/nMaxScore);
+			if(nPercent > 100)
+			{
+				nPercent = 100;
+			}
+			else if (nPercent < 0)
+			{
+				nPercent = 0;
+			}
+			var nDeg = Math.round(360 * (nPercent / 100));
+			if (nPercent > 50)
+			{
+				this.jScorePie.css('clip', 'rect(auto, auto, auto, auto)');
+				this.jScorePieRight.css('transform', 'rotate(180deg)');
+			}
+			else
+			{
+				this.jScorePie.css('clip', 'rect(0, 1em, 1em, 0.5em)');
+				this.jScorePieRight.css('transform', 'rotate(0deg)');
+			}
+			if (oArgs.bDonut!=false)
+			{
+				this.jScorePieRight.css('border-width', sDonutWidth);
+				this.jScorePieLeft.css('border-width', sDonutWidth);
+				this.jScorePieShadow.css('border-width', sDonutWidth);
+			}
+			else
+			{
+				this.jScorePieRight.css('border-width', '0.5em');
+				this.jScorePieLeft.css('border-width', '0.5em');
+				this.jScorePieShadow.css('border-width', '0.5em');
+			}
+			this.jScorePieLeft.css('transform', 'rotate(' + nDeg + 'deg)');
+		}
+		else
+		{
+			this.jScoreMaxValue.hide();
+			this.jScorePie.hide();
+			this.jScorePieShadow.hide();
+			this.jScoreIndicator.find("[wt-role='score-value-container']").attr({ "wt-no-max": "1" });
+		}
+		var sScore = this.oPlayer._FormatNumber({ nValue: nScore });
+		this.jScoreValue.html(sScore);
+		var sString = "";
+		if(nMaxScore==0)
+		{
+			sString = this.oPlayer._GetString({ sId: "score-title-1" });
+		}
+		else
+		{
+			sString = this.oPlayer._GetString({ sId: "score-title-1-max" });
+			sString = sString.split("%2").join(this.oPlayer._FormatNumber({ nValue: nMaxScore }));
+		}
+		sString = sString.split("%1").join(sScore);
+		if(nMasteryScore!=0)
+		{
+			sString += " " + this.oPlayer._GetString({ sId: "score-title-2" });
+			sString = sString.split("%3").join(this.oPlayer._FormatNumber({ nValue: nMasteryScore }));
+		}
+		this.jScoreIndicator.attr({ "title": sString });
+		return this;
+	};
+	CPSimpleMenu.prototype.SubmitComment = function (oArgs)
+	{
+		var sText = this.jCommentFld.val();
+		if(sText!="")
+		{
+			try
+			{
+				API.Comment({ sComment: sText });
+				this.jCommentFld.val("");
+			}
+			catch(e)
+			{}
+		}
+		this.Update();
+		return true;
+	};
+	CPSimpleMenu.prototype.UIEvent = function (oArgs)
+	{
+		var oThis = this;
+		if(!(oThis instanceof CPSimpleMenu))
+		{
+			oThis = oArgs.oArgs.oThis;
+			if(!(oThis instanceof CPSimpleMenu))
+			{
+				return this;
+			}
+		}
+		switch(oArgs.oElem.getAttribute("wt-role"))
+		{
+			case "home":
+			{
+				this.oPlayer.oCover.Show();
+				break;
+			}
+			case "tab-archive":
+			{
+				oThis.jMaterialsBlock.hide();
+				oThis.jModulesBlock.hide();
+				oThis.jArchiveBlock.show();
+				oThis.oBtns["tab-archive"].jBtn.attr({ "wt-selected": "1" });
+				oThis.oBtns["tab-materials"].jBtn.removeAttr("wt-selected");
+				oThis.oBtns["tab-modules"].jBtn.removeAttr("wt-selected");
+				break;
+			}
+			case "tab-modules":
+			{
+				oThis.jMaterialsBlock.hide();
+				oThis.jArchiveBlock.hide();
+				oThis.jModulesBlock.show();
+				oThis.oBtns["tab-modules"].jBtn.attr({ "wt-selected": "1" });
+				oThis.oBtns["tab-materials"].jBtn.removeAttr("wt-selected");
+				oThis.oBtns["tab-archive"].jBtn.removeAttr("wt-selected");
+				break;
+			}
+			case "tab-materials":
+			{
+				oThis.jModulesBlock.hide();
+				oThis.jArchiveBlock.hide();
+				oThis.jMaterialsBlock.show();
+				oThis.oBtns["tab-materials"].jBtn.attr({ "wt-selected": "1" });
+				oThis.oBtns["tab-modules"].jBtn.removeAttr("wt-selected");
+				oThis.oBtns["tab-archive"].jBtn.removeAttr("wt-selected");
+				break;
+			}
+			case "finish":
+			{
+				if(oArgs.oEvt.type=="mouseover")
+				{
+					clearTimeout(oThis.iCloseBtnTimer);
+					oThis.jCloseBtnContainer.attr({ "wt-open": "1" });
+				}
+				else if(oArgs.oEvt.type=="mouseout")
+				{
+					clearTimeout(oThis.iCloseBtnTimer);
+					oThis.iCloseBtnTimer = setTimeout(function () { oThis.jCloseBtnContainer.removeAttr("wt-open"); }, 500);
+				}
+				else
+				{
+					if(oThis.oPlayer.oCourseConfig.sPreStatus=="f")
+					{
+						oThis.oBtns["finish"].SetText({ sText: oThis.oPlayer._GetString({ sId: "course-finishing" }) }).Disable();
+						oThis.oPlayer.Complete();
+					}
+					else
+					{
+						oThis.oBtns["finish"].SetText({ sText: oThis.oPlayer._GetString({ sId: "course-finishing" }) }).Disable();
+						oThis.oPlayer.Complete();
+					}
+				}
+				break;
+			}
+			case "close-player":
+			{
+				if(oArgs.oEvt.type=="mouseover")
+				{
+					clearTimeout(oThis.iCloseBtnTimer);
+					oThis.jCloseBtnContainer.attr({ "wt-open": "1" });
+				}
+				else if(oArgs.oEvt.type=="mouseout")
+				{
+					clearTimeout(oThis.iCloseBtnTimer);
+					oThis.iCloseBtnTimer = setTimeout(function () { oThis.jCloseBtnContainer.removeAttr("wt-open"); }, 500);
+				}
+				else
+				{
+					if(this.oPlayer.oCourseConfig.sJumpToURL!=null && this.oPlayer.oCourseConfig.sJumpToURL!="")
+					{
+						document.location.href = this.oPlayer.oCourseConfig.sJumpToURL;
+						return true;
+					}
+					else
+					{
+						window.close();
+						if(!window.closed)
+						{
+							alert(this.oPlayer._GetString({ sId: "cannot-close" }));
+						}
+					}
+				}
+				break;
+			}
+			case "close":
+			{
+				oThis.Close();
+				break;
+			}
+			case "comments":
+			{
+				oThis.Close({ bMask: true });
+				oThis.oPlayer.oMenu["comment"].Open();
+				break;
+			}
+			case "comment":
+			{
+				oThis.SubmitComment();
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CXBtn
+	window.CXBtn = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.sId = ((oArgs.sId==null) ? TOOLS.GUID() : oArgs.sId);
+		this.jContainer = oArgs.jContainer;
+		this.jBtn = oArgs.jBtn;
+		this.bToggle = (oArgs.bToggle==true);
+		this.fn = oArgs.fn;
+		this.oArgs = oArgs.oArgs;
+		this.fnUnselect = oArgs.fnUnselect;
+		this.oArgsUnselect = oArgs.oArgsUnselect;
+		this.bSelected = false;
+		this.bDisabled = false;
+		this.oGroup = null;
+		this.Constructor();
+		return this;
+	};
+	CXBtn.prototype.Click = function (oArgs)
+	{
+		var oThis = this;
+		this.jBtn.click();
+		return this;
+	};
+	CXBtn.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		this.jBtn.on("click", function (e) { oThis.UIEvent.call(oThis, { oElem: this, oEvt: e }); });
+		return this;
+	};
+	CXBtn.prototype.Select = function (oArgs)
+	{
+		this.jBtn.attr({ "cx-state": "selected" });
+		this.bSelected = true;
+		if(this.oGroup!=null)
+		{
+			this.oGroup.Select({ oBtn: this });
+		}
+		return this;
+	};
+	CXBtn.prototype.Unselect = function (oArgs)
+	{
+		this.jBtn.removeAttr("cx-state");
+		this.bSelected = false;
+		return this;
+	};
+	CXBtn.prototype.Disable = function (oArgs)
+	{
+		this.jBtn.prop("disabled", true);
+		this.bDisabled = true;
+		return this;
+	};
+	CXBtn.prototype.Enable = function (oArgs)
+	{
+		this.jBtn.prop("disabled", false);
+		this.bDisabled = false;
+		return this;
+	};
+	CXBtn.prototype.Hide = function (oArgs)
+	{
+		this.jBtn.hide();
+		this.bVisible = false;
+		return this;
+	};
+	CXBtn.prototype.SetText = function (oArgs)
+	{
+		this.jBtn.html(oArgs.sText);
+		return this;
+	};
+	CXBtn.prototype.Show = function (oArgs)
+	{
+		this.bVisible = true;
+		this.jBtn.show();
+		return this;
+	};
+	CXBtn.prototype.UIEvent = function (oArgs)
+	{
+		switch(oArgs.oEvt.type)
+		{
+			case "click":
+			{
+				if(!this.bDisabled)
+				{
+					if(this.oGroup!=null)
+					{
+						if(!this.bSelected)
+						{
+							this.Select();
+							if(this.fn!=null)
+							{
+								this.fn({ oElem: this.jBtn[0], oEvt: oArgs.oEvt, oArgs: this.oArgs, oBtn: this });
+							}
+						}
+					}
+					else
+					{
+						if(this.bToggle)
+						{
+							if(this.bSelected)
+							{
+								this.Unselect();
+								if(this.fnUnselect!=null)
+								{
+									this.fnUnselect({ oElem: this.jBtn[0], oEvt: oArgs.oEvt, oArgs: this.oArgsUnselect, oBtn: this });
+								}
+							}
+							else
+							{
+								this.Select();
+								if(this.fn!=null)
+								{
+									this.fn({ oElem: this.jBtn[0], oEvt: oArgs.oEvt, oArgs: this.oArgs, oBtn: this });
+								}
+							}
+						}
+						else
+						{
+							if(this.fn!=null)
+							{
+								this.fn({ oElem: this.jBtn[0], oEvt: oArgs.oEvt, oArgs: this.oArgs, oBtn: this });
+							}
+						}
+					}
+				}
+				break;
+			}
+		}
+		return this;
+	};
+}
+{ // CXMsg
+	window.CXMsg = function (oArgs)
+	{
+		this.oPlayer = oArgs.oPlayer;
+		this.sId = ((oArgs.sId==null) ? TOOLS.GUID() : oArgs.sId);
+		this.jContainer = oArgs.jContainer;
+		this.aBtns = oArgs.aBtns;
+		this.sHeader = oArgs.sHeader;
+		this.sMsg = oArgs.sMsg;
+		this.bVisible = false;
+		this.bRating = false;
+		this.iRating = 0;
+		this.oBtns = {};
+		this.Constructor();
+		return this;
+	};
+	CXMsg.prototype.Constructor = function (oArgs)
+	{
+		var oThis = this;
+		this.jMask = this.jContainer.find("[wt-role='msg-mask']");
+		this.jMsgContainer = this.oPlayer.jStorage.find("[wt-template='msg-container']").clone(true).removeAttr("wt-template").appendTo("body");
+		this.jMsg = this.jMsgContainer.find("[wt-role='msg-block']");
+		this.jTitle = this.jMsg.find("[wt-role='msg-header']").html(this.sHeader);
+		this.jText = this.jMsg.find("[wt-role='msg-body']").html(this.sMsg);
+		this.jRatingContainer = this.jMsg.find("[wt-role='msg-rating-body']");
+		this.aRatingBtns = [];
+		this.jRatingContainer.find("[wt-btn]").each(function ()
+		{
+			oThis.aRatingBtns.push( $(this).on("mouseover mouseout click", function (e) { oThis.UIEvent.call(oThis, { oEvt: e, oElem: this, sAction: "rating" }); }) );
+		});
+		this.jBtnContainer = this.jMsg.find("[wt-role='msg-btn-container']");
+		this.oBtns["close"] = new CXBtn({ oPlayer: this.oPlayer, jContainer: this.jMsg, jBtn: this.jMsg.find("[wt-role='btn-close-msg']"), fn: this.UIEvent, oArgs: { oElem: this, oThis: oThis } });
+		var nBtnSize = this.aBtns.length==0 ? 1 : 0.5;//1/this.aBtns.length;
+		var jBtnTemplate = this.oPlayer.jStorage.find("[wt-template='btn-msg']");
+		for(var i=0; i<this.aBtns.length; i++)
+		{
+			this.oBtns[this.aBtns[i].sId] = new CXBtn({ oPlayer: this.oPlayer, jContainer: this.jMsg, jBtn: jBtnTemplate.clone(true).removeAttr("wt-template").css({ "flex-grow": nBtnSize.toFixed(2) }).appendTo(this.jBtnContainer), fn: this.aBtns[i].fn, oArgs: this.aBtns[i].oArgs });
+			this.oBtns[this.aBtns[i].sId].jBtn.attr({ "wt-type": this.aBtns[i].sId });
+			this.oBtns[this.aBtns[i].sId].SetText({ sText: this.aBtns[i].sText });
+		}
+		return this;
+	};
+	CXMsg.prototype.Hide = function (oArgs)
+	{
+		var oThis = this;
+		if(this.bVisible)
+		{
+			this.jMask.fadeOut(200);
+			this.jMsg.animate({ "bottom": "-" + $(this.jMsg).height() + "px" }, 400, function() { oThis.jMsg.hide(); oThis.jMsgContainer.hide(); oThis.bVisible = false; });
+		}
+		return this;
+	};
+	CXMsg.prototype.SetRating = function (oArgs)
+	{
+		this.bRating = (oArgs!=null && oArgs.bRating==true);
+		this.iRating = 0;
+		return this;
+	};
+	CXMsg.prototype.SetText = function (oArgs)
+	{
+		this.jText.html(oArgs.sText);
+		return this;
+	};
+	CXMsg.prototype.SetTitle = function (oArgs)
+	{
+		this.jTitle.html(oArgs.sTitle);
+		return this;
+	};
+	CXMsg.prototype.Show = function (oArgs)
+	{
+		var oThis = this;
+		if(!this.bVisible)
+		{
+			this.jMask.stop(true, true).hide();
+			for(var sKey in this.oPlayer.oMsgs)
+			{
+				if(this.oPlayer.oMsgs.hasOwnProperty(sKey))
+				{
+					this.oPlayer.oMsgs[sKey].jMsg.stop(true, true).hide();
+				}
+			}
+			if(this.bRating)
+			{
+				for(i=0; i<this.aRatingBtns.length; i++)
+				{
+					this.aRatingBtns[i].parent().removeAttr("wt-selected");
+					this.aRatingBtns[i].prop("disabled", false);
+				}
+				this.jRatingContainer.show();
+			}
+			else
+			{
+				this.jRatingContainer.hide();
+			}
+			this.jMsgContainer.show();
+			this.jMask.fadeIn(400);
+			//this.jMsg.width(this.oPlayer.jFrameContainer.width());
+			this.jMsg.show().css({ "bottom": "-" + this.jMsg.height() + "px" }).animate({ "bottom": "0" }, 400);
+			this.bVisible = true;
+		}
+		return this;
+	};
+	CXMsg.prototype.UIEvent = function (oArgs)
+	{
+		var oThis = this;
+		if(!(oThis instanceof CXMsg))
+		{
+			oThis = oArgs.oThis;
+			if(!(oThis instanceof CXMsg) && oArgs.oArgs!=null)
+			{
+				oThis = oArgs.oArgs.oThis;
+				if(!(oThis instanceof CXMsg))
+				{
+					return this;
+				}
+			}
+		}
+		var i;
+		if(oArgs.sAction!=null)
+		{
+			switch(oArgs.sAction)
+			{
+				case "rating":
+				{
+					if(oArgs.oEvt!=null)
+					{
+						var iValue = +oArgs.oElem.getAttribute("wt-value");
+						iValue--;
+						switch(oArgs.oEvt.type)
+						{
+							case "mouseover":
+							{
+								for(i=0; i<oThis.aRatingBtns.length; i++)
+								{
+									if(i<=iValue)
+									{
+										oThis.aRatingBtns[i].parent().attr({ "wt-selected": "1" });
+									}
+									else
+									{
+										oThis.aRatingBtns[i].parent().removeAttr("wt-selected");
+									}
+								}
+								break;
+							}
+							case "mouseout":
+							{
+								for(i=0; i<oThis.aRatingBtns.length; i++)
+								{
+									oThis.aRatingBtns[i].parent().removeAttr("wt-selected");
+								}
+								break;
+							}
+							case "click":
+							{
+								this.iRating = 0;
+								for(i=0; i<oThis.aRatingBtns.length; i++)
+								{
+									if(i<=iValue)
+									{
+										oThis.aRatingBtns[i].parent().attr({ "wt-selected": "1" });
+										this.iRating++;
+									}
+									else
+									{
+										oThis.aRatingBtns[i].parent().removeAttr("wt-selected");
+									}
+									oThis.aRatingBtns[i].prop("disabled", true);
+								}
+								break;
+							}
+						}
+					}
+					break;
+				}
+			}
+		}
+		else
+		{
+			oThis.Hide();
+		}
+		return this;
+	};
+}
+{ // TOOLS
+	if(typeof TOOLS == "undefined")
+	{
+		var TOOLS = {};
+	}
+	if(TOOLS._Hyphenate==null)
+	{
+		TOOLS._Hyphenate = function (oArgs)
+		{
+			function fnHyphens(sTxt)
+			{
+				var sString = sTxt;
+				var aVowels = ["_","A","a","E","e","I","i","O","o","U","u","Y","y","А","а","Е","е","И","и","Й","й","О","о","У","у","Ы","ы","Э","э","Ю","ю","Я","я","Α","α","Ε","ε","Η","η","I","ι","Ο","ο","Υ","υ","Ω","ω"];
+				if(sString.length>10)
+				{
+					var aChars = sString.split("");
+					var iBlock = 0;
+					for(var k=1; k<aChars.length-3; k++)
+					{
+						if(iBlock>3)
+						{
+							if($.inArray(aChars[k], aVowels)!=-1)
+							{
+								aChars[k] += "&shy;";
+								iBlock = 0;
+								continue;
+							}
+						}
+						iBlock++;
+					}
+					sString = aChars.join("");
+				}
+				return sString;
+			}
+			var sValue = oArgs.sText;
+			var i, j;
+			if(sValue.length>40)
+			{
+				var aParts = sValue.split("<");
+				var iCnt = 0;
+				var aChunks;
+				var aWords;
+				var aChars;
+				if(aParts.length>1)
+				{
+					while(aParts[iCnt]!=null)
+					{
+						aChunks = aParts[iCnt].split(">");
+						if(aChunks.length>1)
+						{
+							for(i=1; i<aChunks.length; i++) // first item is tag
+							{
+								aWords = aChunks[i].split(" ");
+								for(j=0; j<aWords.length; j++)
+								{
+									if(aWords[j].length>30)
+									{
+										aWords[j] = fnHyphens(aWords[j]);
+									}
+								}
+								aChunks[i] = aWords.join(" ");
+							}
+						}
+						aParts[iCnt] = aChunks.join(">");
+						iCnt++;
+					}
+					sValue = aParts.join("<");
+				}
+				else
+				{
+					aWords = sValue.split(" ");
+					for(j=0; j<aWords.length; j++)
+					{
+						if(aWords[j].length>30)
+						{
+							aWords[j] = fnHyphens(aWords[j]);
+						}
+					}
+					sValue = aWords.join(" ");
+				}
+			}
+			return sValue;
+		};
+	}
+	if(TOOLS.DateStringFromISO8601==null)
+	{
+		TOOLS.DateStringFromISO8601 = function (oArgs)
+		{ // sISODate, sFormat
+			var sDateString = "";
+			var sFormat = (oArgs.sFormat==null) ? "dd.mm.yy" : oArgs.sFormat;
+			var aParts = oArgs.sISODate.toUpperCase().split("T");
+			if(aParts[0]!=null)
+			{
+				var aDate = aParts[0].split("-");
+				var oDS =
+				{
+					"Y": aDate[0],
+					"M": aDate[1],
+					"D": aDate[2]
+				};
+				sDateString = sFormat.toLowerCase();
+				var aTmp = sDateString.split("dd");
+				sDateString = aTmp.join(oDS["D"]);
+				aTmp = sDateString.split("mm");
+				sDateString = aTmp.join(oDS["M"]);
+				aTmp = sDateString.split("yy");
+				sDateString = aTmp.join(oDS["Y"]);
+				return sDateString;
+			}
+		};
+	}
+	if(TOOLS.DateStringToISO8601==null)
+	{
+		TOOLS.DateStringToISO8601 = function (oArgs)
+		{ // sDateString, sFormat
+			var sDivider = (oArgs.sFormat.indexOf(".")!=-1) ? "." : ((oArgs.sFormat.indexOf("-")!=-1) ? "-" : ((oArgs.sFormat.indexOf("/")!=-1) ? "/" : " "));
+			var aFormatParts = oArgs.sFormat.toLowerCase().split(sDivider);
+			var aDateParts = oArgs.sDateString.split(sDivider);
+			return ( aDateParts[ $.inArray("yy", aFormatParts) ] + "-" + aDateParts[ $.inArray("mm", aFormatParts) ] + "-" + aDateParts[ $.inArray("dd", aFormatParts) ] + "T00:00:00" );
+		};
+	}
+	if(TOOLS.GUID==null)
+	{
+		TOOLS.GUID = function (oArgs)
+		{
+			var sGUID = "";
+			var iRand = 0;
+			for(var i=0; i<32; i++)
+			{
+				if(i==8 || i==12 || i==16 || i==20)
+				{
+					sGUID += "_";
+				}
+				iRand = Math.floor(Math.random()*16).toString(16).toLowerCase();
+				sGUID += iRand;
+			}
+			return sGUID;
+		};
+	}
+	if(TOOLS.AbbreviateName==null)
+	{
+		TOOLS.AbbreviateName = function (oArgs)
+		{
+			var sName = oArgs.sName;
+			var aParts = sName.split(" ");
+			if(aParts.length==2)
+			{
+				aParts[1] = aParts[1].charAt(0) + ".";
+				sName = aParts.join(" ");
+			}
+			else
+			{
+				aParts[aParts.length-1] = aParts[aParts.length-1].charAt(0) + ".";
+				aParts[aParts.length-2] = aParts[aParts.length-2].charAt(0) + ".";
+				sName = aParts.join(" ");
+				sName = sName.slice(0, sName.lastIndexOf(" ")) + aParts[aParts.length-1];
+			}
+			return sName;
+		};
+	}
+	if(TOOLS.AppendNode==null)
+	{
+		TOOLS.AppendNode = function (oArgs)
+		{ // oRoot, sChild, sText, sCDATA, aAttrs
+			var oDoc = oArgs.oRoot.ownerDocument;
+			var oElemNode = oDoc.createElement(oArgs.sChild);
+			var oTextNode = null;
+			if(oArgs.sCDATA!=null && oArgs.sCDATA!="")
+			{
+				oTextNode = oDoc.createCDATASection(oArgs.sCDATA);
+			}
+			else if(oArgs.sText!=null && oArgs.sText!="")
+			{
+				oTextNode = oDoc.createTextNode(oArgs.sText);
+			}
+			if(oArgs.aAttrs!=null)
+			{
+				for(var i=0; i<oArgs.aAttrs.length; i++)
+				{
+					oElemNode.setAttribute(oArgs.aAttrs[i].name, oArgs.aAttrs[i].value);
+				}
+			}
+			if(oTextNode!=null)
+			{
+				oElemNode.appendChild(oTextNode);
+			}
+			oArgs.oRoot.appendChild(oElemNode);
+			return oElemNode;
+		};
+	}
+	if(TOOLS.AppendURLParams==null)
+	{
+		TOOLS.AppendURLParams = function (oArgs)
+		{ // sURL, sParams
+			var iIdx = oArgs.sURL.indexOf("?");
+			return ((iIdx==-1) ? ( (oArgs.sURL.length==iIdx) ? (oArgs.sURL + oArgs.sParams) : (oArgs.sURL + "?" + oArgs.sParams) ) : (oArgs.sURL + "&" + oArgs.sParams));
+		};
+	}
+	if(TOOLS.Refine==null)
+	{
+		TOOLS.Refine = function (oArgs)
+		{
+			switch(oArgs.sType)
+			{
+				case "bool":
+				{
+					var sValue = String(oArgs.sValue).toLowerCase();
+					return (sValue=="true" || sValue=="1" || sValue=="yes");
+				}
+			}
+			return oArgs.sValue;
+		};
+	}
+}
+
+function DonutChart(parent, spec)
+{
+    var __polar2xy = function(a, r)
+	{
+		return { x:  Math.cos(a * 2 * Math.PI) * r, y: -Math.sin(a * 2 * Math.PI) * r };
+	};
+
+    var __gen_arc_path = function(cx, cy, r, start, offset)
+	{
+		var end = __polar2xy(start + offset, r);
+		start = __polar2xy(start, r);
+		return [
+			"M", cx + start.x, cy + start.y,
+			"A", r, r, 0, +(offset > 0.5), 0, cx + end.x, cy + end.y,
+		].join(" ");
+    };
+
+    var __gen_chart_item = function(out, c, r, prev, cur, i, stroke)
+	{
+		out.push(["path", {
+			d: __gen_arc_path(c, c, r, prev, cur),
+			class: "chart-item-" + i,
+			fill: "transparent",
+			"stroke-width": stroke,
+		}]);
+    };
+
+    var __gen_chart = function(chart)
+	{
+		var prev = 0; var out = [];
+		// FIXME get radius and stroke-width from CSS
+		var c = chart.r, r = chart.r - chart.stroke / 2;
+		for (var i in chart.items)
+		{
+			if(chart.items.hasOwnProperty(i))
+			{
+				cur = chart.items[i];
+				__gen_chart_item(out, c, r, prev, cur.value, i, chart.stroke);
+				prev += cur.value;
+			}
+		}
+		if (prev < 1)
+		{
+			__gen_chart_item(out, c, r, prev, 1 - prev, "bg", chart.stroke);
+		}
+		return out;
+    };
+
+    var __create_tag_tree = function(elem)
+	{
+		var root = document.createElementNS("http://www.w3.org/2000/svg", elem[0]);
+		var attr = elem[1];
+		var i = 0;
+		// Set attributes
+		for (i in attr)
+		{
+			if(attr.hasOwnProperty(i))
+			{
+				var a = document.createAttribute(i);
+				a.value = attr[i];
+				root.setAttributeNode(a);
+			}
+		}
+		// Create children nodes
+		if (elem.length > 2)
+		{
+			var children = elem[2];
+			for (i in children)
+			{
+				if(children.hasOwnProperty(i))
+				{
+					var c = __create_tag_tree(children[i]);
+					root.appendChild(c);
+				}
+			}
+		}
+		return root;
+    };
+
+
+    /* Transformation matrix (rotate and mirror) to correct orientation:
+     * \[
+     *   \left[
+     *   \begin{array}{ccc}
+     *      0 & -1 & 0 \\
+     *     -1 &  0 & 0 \\
+     *      0 &  0 & 1
+     *   \end{array}
+     *   \right]
+     * \]
+     */
+    var correct_orientation = "matrix(0 -1 -1 0 0 0)";
+
+    var __gen_code = function(spec)
+	{
+		return __create_tag_tree(
+	    ["svg", {
+		transform: correct_orientation,
+		class: "chart-donut",
+/*		width: spec.r * 2,
+		height: spec.r * 2,*/
+		viewBox: ("0 0 " + spec.r * 2 + " " + spec.r * 2)
+	    }, __gen_chart(spec)]);
+    };
+
+    var __is_dict = function(v)
+	{
+		return v && typeof v === "object" && !(v instanceof Array);
+    };
+
+    DonutChart.prototype.update = function(spec)
+	{
+		// Merge the new spec
+		for(var i in spec)
+		{
+			if(spec.hasOwnProperty(i))
+			{
+				this.spec[i] = spec[i];
+			}
+		}
+
+		var code = __gen_code(this.spec);
+		// TODO can we switch the elements in place?
+		if (this.element != undefined)
+		{
+			this.element.remove();
+		}
+		this.element = this.parent.appendChild(code);
+    };
+
+    this.parent = parent;
+    this.spec = spec;
+    this.update({});
+}
+
+var Check =
+{
+	Flash: function ()
+	{
+		var oVersion = deconcept.SWFObjectUtil.getPlayerVersion();
+		//oVersion[major,minor,rev]
+		if(oVersion.major > 0)
+		{
+			return oVersion;
+		}
+		return null;
+	},
+	Silverlight: function ()
+	{
+        function LoopMatch(control, vers, idx, inc)
+		{
+            while(IsSupported(control, vers))
+			{
+                vers[idx]+=inc;
+            }
+            vers[idx] -= inc;
+        }
+
+        function IsSupported(control, ver)
+		{
+            return control.isVersionSupported(ver[0]+ "."+ ver[1] + "." + ver[2] + "." + ver[3]);
+        }
+
+		var i = 0;
+        var aParts = ["major", "minor", "build", "rev"];
+		var oVersion = { major: "0", minor: "0", build: "0", rev: "0" };
+        //non-IE
+        var oSL = navigator.plugins["Silverlight Plug-In"];
+        if(oSL)
+		{
+			var aChunks = oSL.description.split(".");
+            for(i=0; i<4; i++)
+			{
+				oVersion[aParts[i]] = (aChunks[i]!=null) ? parseInt(aChunks[i], 10).toString() : "0";
+            }
+        }
+		else
+		{
+            //IE
+            try
+			{
+                var oActiveX = new ActiveXObject('AgControl.AgControl');
+                var aVers = [1, 0, 0, 0];
+                LoopMatch(oActiveX, aVers, 0, 1);
+				LoopMatch(oActiveX, aVers, 1, 1);
+				LoopMatch(oActiveX, aVers, 2, 10000);
+				LoopMatch(oActiveX, aVers, 2, 1000);
+				LoopMatch(oActiveX, aVers, 2, 100);
+				LoopMatch(oActiveX, aVers, 2, 10);
+				LoopMatch(oActiveX, aVers, 2, 1);
+				LoopMatch(oActiveX, aVers, 3, 1);
+                for(i=0; i<4; i++)
+				{
+                    oVersion[aParts[i]] = aVers[i].toString();
+                }
+            }
+			catch(e)
+			{}
+        }
+		return ((oVersion.major!=0) ? oVersion : null);
+	}
+
+};
+
+var Browser =
+{
+	nVer: navigator.appVersion,
+	sAgent: navigator.userAgent,
+	sName: navigator.appName,
+	sType: "",
+	sFullVersion: "" + parseFloat(navigator.appVersion),
+	iVersion: parseInt(navigator.appVersion, 10),
+	Init: function ()
+	{
+		var nameOffset, verOffset, ix;
+		// In Opera, the true version is after "Opera" or after "Version"
+		if ((verOffset=Browser.sAgent.indexOf("Opera"))!=-1)
+		{
+			Browser.sName = "Opera";
+			Browser.sType = "opera";
+			Browser.sFullVersion = Browser.sAgent.substring(verOffset+6);
+			if ((verOffset=Browser.sAgent.indexOf("Version"))!=-1)
+			{
+				Browser.sFullVersion = Browser.sAgent.substring(verOffset+8);
+			}
+		}
+		// In MSIE, the true version is after "MSIE" in userAgent
+		else if ((verOffset=Browser.sAgent.indexOf("MSIE"))!=-1)
+		{
+			Browser.sName = "Microsoft Internet Explorer";
+			Browser.sType = "msie";
+			Browser.sFullVersion = Browser.sAgent.substring(verOffset+5);
+		}
+		// In Chrome, the true version is after "Chrome"
+		else if ((verOffset=Browser.sAgent.indexOf("Chrome"))!=-1)
+		{
+			Browser.sName = "Chrome";
+			Browser.sType = "chrome";
+			Browser.sFullVersion = Browser.sAgent.substring(verOffset+7);
+		}
+		// In Safari, the true version is after "Safari" or after "Version"
+		else if ((verOffset=Browser.sAgent.indexOf("Safari"))!=-1)
+		{
+			Browser.sName = "Safari";
+			Browser.sType = "safari";
+			Browser.sFullVersion = Browser.sAgent.substring(verOffset+7);
+			if ((verOffset=Browser.sAgent.indexOf("Version"))!=-1)
+			{
+				Browser.sFullVersion = Browser.sAgent.substring(verOffset+8);
+			}
+		}
+		// In Firefox, the true version is after "Firefox"
+		else if ((verOffset=Browser.sAgent.indexOf("Firefox"))!=-1)
+		{
+			Browser.sName = "Firefox";
+			Browser.sType = "firefox";
+			Browser.sFullVersion = Browser.sAgent.substring(verOffset+8);
+		}
+		// In most other browsers, "name/version" is at the end of userAgent
+		else if ( (nameOffset=Browser.sAgent.lastIndexOf(' ')+1) < (verOffset=Browser.sAgent.lastIndexOf('/')) )
+		{
+			Browser.sName = Browser.sAgent.substring(nameOffset,verOffset);
+			Browser.sFullVersion = Browser.sAgent.substring(verOffset+1);
+			if (Browser.sName.toLowerCase()==Browser.sName.toUpperCase())
+			{
+				Browser.sName = navigator.appName;
+				Browser.sType = Browser.sName.toLowerCase();
+			}
+		}
+		// trim the Browser.sFullVersion string at semicolon/space if present
+		if ((ix=Browser.sFullVersion.indexOf(";"))!=-1)
+		{
+			Browser.sFullVersion=Browser.sFullVersion.substring(0,ix);
+		}
+		if ((ix=Browser.sFullVersion.indexOf(" "))!=-1)
+		{
+			Browser.sFullVersion=Browser.sFullVersion.substring(0,ix);
+		}
+
+		Browser.iVersion = parseInt(''+Browser.sFullVersion,10);
+		if (isNaN(Browser.iVersion))
+		{
+			Browser.sFullVersion  = ''+parseFloat(navigator.appVersion);
+			Browser.iVersion = parseInt(navigator.appVersion,10);
+		}
+	}
+};
+
+var CLTOOLS =
+{
+	Base64:
+	{
+		_keyStr : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+		Encode : function (oArgs)
+		{
+			var input = oArgs.sString;
+			var output = "";
+			var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+			var i = 0;
+
+			input = CLTOOLS.Base64._utf8_encode(input);
+
+			while (i < input.length)
+			{
+
+				chr1 = input.charCodeAt(i++);
+				chr2 = input.charCodeAt(i++);
+				chr3 = input.charCodeAt(i++);
+
+				enc1 = chr1 >> 2;
+				enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+				enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+				enc4 = chr3 & 63;
+
+				if (isNaN(chr2))
+				{
+					enc3 = enc4 = 64;
+				}
+				else if (isNaN(chr3))
+				{
+					enc4 = 64;
+				}
+
+				output = output +
+				this._keyStr.charAt(enc1) + this._keyStr.charAt(enc2) +
+				this._keyStr.charAt(enc3) + this._keyStr.charAt(enc4);
+
+			}
+
+			return output;
+		},
+		Decode : function (oArgs)
+		{
+			var input = oArgs.sString;
+			var output = "";
+			var chr1, chr2, chr3;
+			var enc1, enc2, enc3, enc4;
+			var i = 0;
+
+			input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+
+			while (i < input.length) {
+
+				enc1 = this._keyStr.indexOf(input.charAt(i++));
+				enc2 = this._keyStr.indexOf(input.charAt(i++));
+				enc3 = this._keyStr.indexOf(input.charAt(i++));
+				enc4 = this._keyStr.indexOf(input.charAt(i++));
+
+				chr1 = (enc1 << 2) | (enc2 >> 4);
+				chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+				chr3 = ((enc3 & 3) << 6) | enc4;
+
+				output = output + String.fromCharCode(chr1);
+
+				if (enc3 != 64) {
+					output = output + String.fromCharCode(chr2);
+				}
+				if (enc4 != 64) {
+					output = output + String.fromCharCode(chr3);
+				}
+
+			}
+
+			output = CLTOOLS.Base64._utf8_decode(output);
+
+			return output;
+
+		},
+		_utf8_encode : function (string) {
+			string = string.replace(/\r\n/g,"\n");
+			var utftext = "";
+
+			for (var n = 0; n < string.length; n++) {
+
+				var c = string.charCodeAt(n);
+
+				if (c < 128) {
+					utftext += String.fromCharCode(c);
+				}
+				else if((c > 127) && (c < 2048)) {
+					utftext += String.fromCharCode((c >> 6) | 192);
+					utftext += String.fromCharCode((c & 63) | 128);
+				}
+				else {
+					utftext += String.fromCharCode((c >> 12) | 224);
+					utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+					utftext += String.fromCharCode((c & 63) | 128);
+				}
+
+			}
+
+			return utftext;
+		},
+		_utf8_decode : function (utftext) {
+			var string = "";
+			var i = 0;
+			var c = 0; var c1 = 0; var c2 = 0; var c3 = 0;
+
+			while ( i < utftext.length ) {
+
+				c = utftext.charCodeAt(i);
+
+				if (c < 128) {
+					string += String.fromCharCode(c);
+					i++;
+				}
+				else if((c > 191) && (c < 224)) {
+					c2 = utftext.charCodeAt(i+1);
+					string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+					i += 2;
+				}
+				else {
+					c2 = utftext.charCodeAt(i+1);
+					c3 = utftext.charCodeAt(i+2);
+					string += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+					i += 3;
+				}
+
+			}
+
+			return string;
+		}
+	}
+};
