@@ -44,8 +44,8 @@ p{
 
 h2{
     text-align: center;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    padding-top: 30px;
+    padding-bottom: 30px;
     color: rgb(255, 255, 255);
 
    
@@ -106,7 +106,10 @@ main{
 }
 
 
-
+.ip-main{
+    background-color: rgb(107, 107, 107);
+    background-image: url(htts://million-wallpapers.ru/wallpapers/4/42/450634839906653/google.jpg);
+}
 
 
 
@@ -448,3 +451,11 @@ div.scrollmenu a {
 div.scrollmenu a:hover {
     background-color: rgb(155, 154, 154);
 }
+
+
+
+
+
+
+
+
