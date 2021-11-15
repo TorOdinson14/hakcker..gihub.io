@@ -34,7 +34,7 @@ background-color: black;
     p{
      
       color: aliceblue;
-      font-size: auto;
+      hyphens: auto;
 
     }
     
