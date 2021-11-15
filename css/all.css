@@ -188,7 +188,7 @@ background-color: black;
     /**************************************/
     
     .container{
-  
+  margin: 0 10px 0 10px ;
     margin-left: auto;
     margin-right: auto;
     flex-wrap: wrap;
@@ -199,6 +199,13 @@ background-color: black;
         margin-left: 50px;
         margin-right: 20px;
     }
+
+.content-block{
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
     section{
         margin: 0px 0 50px 0;
     }
@@ -209,7 +216,7 @@ background-color: black;
         justify-content: space-around;
         flex-wrap:wrap ;
     }
-    
+   
     
     
     .content-video{
