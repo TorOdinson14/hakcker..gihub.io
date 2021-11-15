@@ -1,5 +1,5 @@
 body{
-    width: 100%;
+background-color: black;
     height: 100%;
  
     }
@@ -17,7 +17,7 @@ body{
         background-image: url(https://avatars.mds.yandex.net/get-zen_doc/941737/pub_5dd51d710d682f6da91c45f2_5dd655a54b1a762d7ecba162/scale_1200);
         background-size: 200%;
         background-position: top center;
-      margin: 0 -8px 0 -8px;
+      margin: 80px -8px 0 -8px;
       flex: 1 1 auto;
     }
     
