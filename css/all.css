@@ -34,8 +34,8 @@ background-color: black;
     p{
      
       color: aliceblue;
-      padding: 10px;
-      
+     
+      word-break: break-all;
     }
     
     
