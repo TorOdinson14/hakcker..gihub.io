@@ -209,7 +209,9 @@ background-color: black;
     section{
         margin: 0px 0 50px 0;
     }
-    
+  .container{
+      padding: 0px 100px 0 100px;
+  }
     
     .block{
         display: flex;
